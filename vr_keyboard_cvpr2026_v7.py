@@ -22,7 +22,8 @@ Paper Claims:
 Author: Mukhiddin Toshpulatov
 Institution: KAIST SpaceTop Research Center
 """
-# learning git commands
+
+#This is vr keyboard project for CVPR 2026 paper. This is the main implementation file, version 1 (v7). It includes the velocity-based tap detection with state machine, threshold hysteresis, multi-modal fusion, and real-time performance metrics. The depth model is fine-tuned Depth Anything V2. The code is structured for clarity and modularity, with detailed comments explaining each part of the methodology.
 
 import sys
 import os
@@ -32,7 +33,7 @@ from pathlib import Path
 DEPTH_MODEL_PATH = r"D:\Codes\vscode\Depth_Anything_V2_main\metric_depth"
 if os.path.exists(DEPTH_MODEL_PATH):
     sys.path.insert(0, DEPTH_MODEL_PATH)
-
+# Add src path for local modules
 import cv2
 import numpy as np
 import json
