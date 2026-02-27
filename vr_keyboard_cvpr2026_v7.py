@@ -47,18 +47,6 @@ import torch
 import torch.nn.functional as F
 torch.serialization.add_safe_globals([np.core.multiarray._reconstruct])
 
-# Try to import depth model
-# try:
-#     # Try local version first (with our custom code)
-#     from depth_model_manager import DepthEstimator
-#     DEPTH_MODEL_AVAILABLE = True
-#     print("[INFO] Using LOCAL depth_model_manager.py")
-# except ImportError:
-#     try:
-#         # Fallback to installed version
-#         from src.depth_model_manager import DepthEstimator
-#         DEPTH_MODEL_AVAILABLE = True
-#         print("[INFO] Using INSTALLED depth_model_manager from src/")
 try:
     # Try src version first (the GOOD one with vitl fix)
     from src.depth_model_manager1 import DepthEstimator
@@ -229,22 +217,7 @@ class VelocityBasedContactDetector:
 
         self.tap_triggered: Dict[str, bool] = {}
         self.last_tap_time: Dict[str, float] = {}
-    # def get_smoothed_depth(self, finger_id: str, current_depth: float) -> float:
-    #     """
-    #     Apply temporal smoothing to depth readings.
-    #     Reduces jitter from depth estimation noise.
-    #     """
-    #     if finger_id not in self.depth_history:
-    #         return current_depth
-        
-    #     history = list(self.depth_history[finger_id])
-    #     if len(history) == 0:
-    #         return current_depth
-        
-    #     # Exponential moving average (alpha=0.3 for smoothing)
-    #     smoothed = current_depth * 0.3 + np.mean(history) * 0.7
-        
-    #     return smoothed
+    
     def get_smoothed_depth(self, finger_id: str) -> float:
         """
         Get temporally smoothed depth value.
