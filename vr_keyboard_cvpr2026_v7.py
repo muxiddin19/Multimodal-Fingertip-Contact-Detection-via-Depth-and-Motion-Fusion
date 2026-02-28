@@ -459,12 +459,11 @@ class VelocityBasedContactDetector:
         debug_info = {}
 
         # Calculate distance from surface
-        # smoothed_depth = self.get_smoothed_depth(finger_id, depth_corrected)
+    
         smoothed_depth = self.get_smoothed_depth(finger_id)  # ← Use history
         distance_from_surface = surface_depth - smoothed_depth  # ← Use smoothed
         distance_cm = distance_from_surface * 100
-        # distance_from_surface = surface_depth - depth_corrected
-        # distance_cm = distance_from_surface * 100
+  
 
         debug_info['depth_cm'] = distance_cm
 
@@ -513,22 +512,12 @@ class VelocityBasedContactDetector:
             return (False, 0.0, debug_info)
         debug_info['in_cooldown'] = False
 
-        # In VelocityBasedContactDetector.check_contact() method
-        # Replace the "DECISION LOGIC" section (around line 380):
+      
 
         # DECISION LOGIC - Velocity-based (PRIMARY) + MANDATORY Depth Check
         confidence = 0.0
 
-        # if velocity_contact:
-        #     # ← ADD MANDATORY DEPTH CHECK:
-        #     if depth_ok:  # Finger MUST be near surface
-        #         confidence += 0.6  # Strong signal: velocity + depth
-        #     elif distance_cm < 1.0:  # Reasonably close (within 1cm)
-        #         confidence += 0.4  # Moderate signal
-        #     else:
-        #         # ← CHANGED: Reject if too far from surface
-        #         confidence = 0.0  # Not a valid tap
-        #         debug_info['rejected_too_far'] = True
+      
         if velocity_contact:
             # Prevent double triggers
             if self.tap_triggered.get(finger_id, False):
@@ -638,35 +627,15 @@ class VRKeyboardCVPR2026:
                 model_type='depth_anything_v2',
                 custom_checkpoint=checkpoint
             )
-            # checkpoint = depth_checkpoint or r"D:\Codes\vscode\Pretrained_weights\depth_anything_v2\latest20.pth"
-            # NEW (BEST MODEL):
-            # checkpoint = depth_checkpoint or r"D:\Codes\vscode\Pretrained_weights\custom_unet\best_model_epoch_1.pth"
-            # Or for speed:
-            # checkpoint = depth_checkpoint or r"D:\Codes\vscode\Pretrained_weights\depth_anything_v2_vits.pth"
-
-            # # self.depth_estimator = DepthEstimator(custom_checkpoint=checkpoint)
-            # self.depth_estimator = DepthEstimator(model_path=checkpoint)
-            # Old version:
-            # Use specified checkpoint or default
-            # self.depth_checkpoint_path = depth_checkpoint
-            # if self.depth_checkpoint_path is None:
-            #     self.depth_checkpoint_path = r"D:\Codes\vscode\Pretrained_weights\depth_anything_v2\latest20.pth"
+ 
             # Use specified checkpoint or default
             #Changed here
             self.depth_checkpoint_path = depth_checkpoint
-            # if self.depth_checkpoint_path is None:
-                # ← Point to ViT-S checkpoint instead
-                # self.depth_checkpoint_path = r"D:/Codes/vscode/Pretrained_weights/depth_anything_v2_metric_hypersim_vits.pth"
+
             if self.depth_checkpoint_path is None:
-                # Use the real-world trained ViT-S model (NOT hypersim)
-                #self.depth_checkpoint_path = r"D:\Codes\vscode\Pretrained_weights\depth_anything_v2_s\latest32.pth"
-                # In vr_keyboard_cvpr2026_v6.py, line ~738:
-                #checkpoint = r"D:\Codes\vscode\Pretrained_weights\depth_anything_v2_metric_hypersim_vits.pth"
+
                 checkpoint = r"D:\Codes\vscode\Pretrained_weights\depth_anything_v2_vits.pth"
-                # depth_anything_v2_metric_hypersim_vits.pth
-            # self.depth_estimator = DepthEstimator(model_path=self.depth_checkpoint_path)
-            # OLD:
-            # self.depth_estimator = DepthEstimator(model_path=self.depth_checkpoint_path)
+ 
 
             # NEW:
             self.depth_estimator = DepthEstimator(custom_checkpoint=self.depth_checkpoint_path)
@@ -771,40 +740,6 @@ class VRKeyboardCVPR2026:
     def current_model_name(self):
         return os.path.basename(self.depth_checkpoint_path) if self.depth_checkpoint_path else "Unknown"
 
-    # In vr_keyboard_cvpr2026_v6.py, add auto-calibration:
-
-    # def auto_calibrate_keyboard(self, depth_map):
-    #     """
-    #     Automatically calibrate using keyboard plane detection.
-    #     Fits a plane to multiple keyboard points for robust scale estimation.
-    #     """
-    #     import cv2
-    #     import numpy as np
-        
-    #     # Sample 9 points across keyboard (corners + center + edges)
-    #     h, w = depth_map.shape
-    #     sample_points = [
-    #         (w//4, h//4), (w//2, h//4), (3*w//4, h//4),      # Top row
-    #         (w//4, h//2), (w//2, h//2), (3*w//4, h//2),      # Middle row
-    #         (w//4, 3*h//4), (w//2, 3*h//4), (3*w//4, 3*h//4) # Bottom row
-    #     ]
-        
-    #     depths = [depth_map[y, x] for x, y in sample_points]
-    #     median_depth = np.median(depths)
-        
-    #     # Assume keyboard is ~37cm away (adjust to your setup)
-    #     KNOWN_KEYBOARD_DISTANCE = 0.37  # meters
-    #     self.depth_scale_factor = KNOWN_KEYBOARD_DISTANCE / median_depth
-    #     self.keyboard_surface_depth = KNOWN_KEYBOARD_DISTANCE
-    #     self.is_calibrated = True
-        
-    #     print(f"\n[AUTO-CALIBRATED]")
-    #     print(f"  Median raw depth: {median_depth:.3f}m")
-    #     print(f"  Scale factor: {self.depth_scale_factor:.4f}")
-    #     print(f"  Surface depth: {KNOWN_KEYBOARD_DISTANCE*100:.1f}cm\n")
-
-    # In vr_keyboard_cvpr2026_v6.py, add this method to VRKeyboardCVPR2026 class
-    # Add it right after the calibrate_keyboard_surface() method (around line 850)
 
     def auto_calibrate_keyboard(self, depth_map: np.ndarray, known_distance_cm: float = 37.0):
         """
@@ -852,13 +787,7 @@ class VRKeyboardCVPR2026:
         print(f"    Median depth: {median_depth:.3f}m")
         print(f"    Std deviation: {std_depth:.3f}m")
         print(f"    Outliers removed: {len(depths) - len(depths_filtered)}")
-        # Use median (robust to outliers from hands/objects)
-        #median_depth = np.median(depths)
-        #std_depth = np.std(depths)
-        
-        #print(f"\n  Statistics:")
-        #print(f"    Median depth: {median_depth:.3f}m")
-        #print(f"    Std deviation: {std_depth:.3f}m")
+    
         
         # Calculate scale factor
         self.actual_distance_m = known_distance_cm / 100.0
@@ -1139,11 +1068,7 @@ class VRKeyboardCVPR2026:
                 max_distance = 50  # Default max distance
                 key_name = key.get('name', '')
 
-                # Stricter threshold for dangerous edge keys (backspace protection)
-                # if key_name in ['backspace', 'Backspace', 'B.Spa', 'delete', 'Delete', 'del', 'esc', 'Esc', 'ESC']:
-                #     max_distance = 5  # VERY strict for dangerous keys - must be almost exactly on key
-                # if key_name in ['backspace', 'Backspace', 'B.Spa', 'delete', 'Delete']:
-                #     max_distance = 30  # Much stricter for backspace
+ 
 
                 if distance < max_distance and distance < best_distance:
                     best_distance = distance
@@ -1155,61 +1080,7 @@ class VRKeyboardCVPR2026:
                 return (best_key['name'], confidence, debug_info)
 
         return (None, confidence, debug_info)
-        # if is_contact:
-        #     # ← ADD FINGER PAD OFFSET:
-        #     # Fingertip TIP is detected, but contact happens at PAD (5-10mm below)
-        #     # In image space, this is approximately 15-20 pixels down
-        #     # FINGER_PAD_OFFSET_Y = 18  # pixels (tune this for your camera/hand size)
-        #     contact_x = x
-        #     contact_y = y + 18  # Move contact point down
-        #     # contact_y = y + FINGER_PAD_OFFSET_Y  # Move contact point down
-        #     # Find ALL keys within 40px radius
-        # # Find BEST key by closest center (not just any key within polygon)
-        # best_key = None
-        # best_distance = float('inf')
-
-        # for key in self.keys:
-        #     center_x, center_y = key['center']
-        #     distance = np.sqrt((contact_x - center_x)**2 + (contact_y - center_y)**2)
-
-        #     # Must be reasonably close (within 50px of center)
-        #     if distance < 50 and distance < best_distance:
-        #         best_distance = distance
-        #         best_key = key
-
-        # if best_key:
-        #     if self.debug_mode:
-        #         print(f"[KEY SELECTED] {best_key['name']} (dist: {best_distance:.1f}px)")
-        #     return (best_key['name'], confidence, debug_info)
-
-        # return (None, confidence, debug_info)
-        #     nearby_keys = []
-        #     for key in self.keys:
-        #         center_x, center_y = key['center']
-        #         distance = np.sqrt((contact_x - center_x)**2 + (contact_y - center_y)**2)
-        #         if distance < 60:  # Within 60px
-        #             nearby_keys.append((key['name'], distance))
-            
-        #     if nearby_keys:
-        #         print(f"[NEARBY KEYS] {nearby_keys}")
-        #     # Draw both points on frame for calibration
-        #     cv2.circle(frame, (x, y), 8, (255, 0, 255), 2)  # Magenta = TIP
-        #     cv2.circle(frame, (contact_x, contact_y), 8, (0, 255, 255), -1)  # Cyan = CONTACT POINT
-        #     cv2.line(frame, (x, y), (contact_x, contact_y), (255, 255, 0), 2)  # Yellow line
-
-        #     # Now check which key is at the CONTACT point (not tip point)
-        #     for key in self.keys:
-        #         if self._is_fingertip_on_key((contact_x, contact_y), key):
-        #             return (key['name'], confidence, debug_info)
-
-        # return (None, confidence, debug_info)
-
-
-            #for key in self.keys:
-             #   if self._is_fingertip_on_key((x, y), key):
-              #      return (key['name'], confidence, debug_info)
-
-        #return (None, confidence, debug_info)
+ 
 
     def _draw_keyboard(self, frame: np.ndarray):
         """Draw keyboard overlay."""
@@ -1384,29 +1255,6 @@ class VRKeyboardCVPR2026:
                                 depth_map, hand_landmarks, fingertip_id, frame.shape[:2])
 
                             finger_id = f"h{hand_idx}_f{fingertip_id}"
-                            # ... rest of existing code unchanged
-                # Right after hand tracking (around line 1161)
-                # if results.multi_hand_landmarks:
-                #     self.contact_detector.metrics.total_frames += 1  # ← ADD THIS
-                #     for hand_idx, hand_landmarks in enumerate(results.multi_hand_landmarks):
-                #         # ... rest of code
-                # # if results.multi_hand_landmarks:
-                #     # for hand_idx, hand_landmarks in enumerate(results.multi_hand_landmarks):
-                #         # Draw hand skeleton
-                #         self.mp_draw.draw_landmarks(
-                #             frame, hand_landmarks, self.mp_hands.HAND_CONNECTIONS,
-                #             landmark_drawing_spec=mp.solutions.drawing_utils.DrawingSpec(
-                #                 color=(0, 255, 0), thickness=3, circle_radius=4),
-                #             connection_drawing_spec=mp.solutions.drawing_utils.DrawingSpec(
-                #                 color=(255, 255, 255), thickness=2)
-                #         )
-
-                #         # Process fingertips
-                #         for fingertip_id in self.fingertip_landmarks:
-                #             x, y, depth_corrected, _ = self._get_fingertip_depth(
-                #                 depth_map, hand_landmarks, fingertip_id, frame.shape[:2])
-
-                #             finger_id = f"h{hand_idx}_f{fingertip_id}"
 
                             # Check for key press
                             pressed_key, confidence, debug_info = self._check_key_press(
@@ -1515,11 +1363,7 @@ class VRKeyboardCVPR2026:
                     print(f"[DEBUG] {'ON' if self.debug_mode else 'OFF'}")
                 elif key == ord('m'):
                     self.print_metrics()
-                # elif key == ord('d'):
-                #     self.debug_mode = not self.debug_mode
-                #     print(f"[DEBUG] {'ON' if self.debug_mode else 'OFF'}")
-                # elif key == ord('m'):
-                #     self.print_metrics()
+
 
         finally:
             print("\n[SHUTDOWN]")
