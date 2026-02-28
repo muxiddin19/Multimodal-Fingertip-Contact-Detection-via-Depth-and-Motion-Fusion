@@ -55,13 +55,9 @@ class DepthEstimator:
         torch.manual_seed(42)
         if torch.cuda.is_available():
             torch.cuda.manual_seed_all(42)        # Calibration parameters
-        # self.scale = 1.0
-        # self.offset = 0.0
-        # self.is_calibrated = False
-        
-        # self._load_model()
+
         # Determine encoder based on checkpoint name
-        # self.encoder = 'vitb' # Default
+  
         self.encoder = 'vits'  # Default to ViT-Base
         if custom_checkpoint:
             checkpoint_name = os.path.basename(custom_checkpoint).lower()
@@ -82,27 +78,7 @@ class DepthEstimator:
         self.is_calibrated = False
         self.model = self._load_model()
     def _load_model(self):
-    #     """
-    #     Dynamically detects architecture from checkpoint name and loads weights.
-    #     """
-    #     print(f"\nLoading Depth Model...")
-    #     print(f"  Checkpoint: {os.path.basename(self.custom_checkpoint) if self.custom_checkpoint else 'Default'}")
-
-    #     # 1. ARCHITECTURE DETECTION
-    #     # Default to vitb (Base)
-    #     encoder = 'vitb'
-        
-    #     if self.custom_checkpoint:
-    #         ckpt_name = self.custom_checkpoint.lower()
-    #         if 'vitl' in ckpt_name:
-    #             encoder = 'vitl'
-    #             print("  Architecture detected: ViT-Large (vitl)")
-    #         elif 'vits' in ckpt_name:
-    #             encoder = 'vits'
-    #             print("  Architecture detected: ViT-Small (vits)")
-    #         else:
-    #             print("  Architecture detected: ViT-Base (vitb)")
-    # def _load_model(self):
+ 
     #     # Configuration for Depth Anything V2
             # ← ADD THIS PRINT:
         print(f"\n[MODEL LOADING]")
@@ -123,10 +99,7 @@ class DepthEstimator:
         # Correctly initialize the model with the right config
         model = DepthAnythingV2(**config)
         
-        # if self.custom_checkpoint:
-        #     # map_location ensures it loads on CPU first if needed to avoid OOM
-        #     state_dict = torch.load(self.custom_checkpoint, map_location='cpu')
-        #     model.load_state_dict(state_dict)
+ 
         if self.custom_checkpoint:
             print(f"  Loading weights from: {self.custom_checkpoint}")
 
@@ -148,9 +121,7 @@ class DepthEstimator:
             print(f"  State dict keys (first 3): {list(new_state_dict.keys())[:3]}")
             model.load_state_dict(new_state_dict)  # ← Use new_state_dict instead of state_dict    
 
-            # ← ADD THIS PRINT:
-            # print(f"  State dict keys (first 3): {list(state_dict.keys())[:3]}")
-            # model.load_state_dict(state_dict)    
+
 
             # ← ADD THIS PRINT:
         print(f"  ✓ Weights loaded successfully!")
@@ -168,131 +139,14 @@ class DepthEstimator:
                 module.drop_prob = 0.0
         # After the dropout disabling loop
         
-        # print("\n[DEBUG] Checking dropout layers:")
-        # for name, module in model.named_modules():
-        #     if isinstance(module, torch.nn.Dropout):
-        #         print(f"  {name}: p={module.p}")
-        #     if hasattr(module, 'drop_prob'):
-        #         print(f"  {name}: drop_prob={module.drop_prob}")
+ 
 
         model.to(self.device).eval()
         
         # ← ADD THIS PRINT:
         print(f"  ✓ Model ready on {self.device.upper()}\n")
         return model
-    
-        # In depth_model_manager.py, ensure the model is initialized correctly for Large:
-        
-
-        # For the Vit-Large model:
-        # model_configs = {
-        #     'vitl': {'encoder': 'vitl', 'features': 256, 'out_channels': [256, 512, 1024, 1024]}
-        # }
-        # Initialize with 'vitl' configuration before loading 'depth_anything_vitl14.pth'
-
-        # 2. MODEL CONFIGURATION
-        # Define settings for each model size
-        # model_configs = {
-        #     'vits': {'encoder': 'vits', 'features': 64, 'out_channels': [48, 96, 192, 384]},
-        #     'vitb': {'encoder': 'vitb', 'features': 128, 'out_channels': [96, 192, 384, 768]},
-        #     'vitl': {'encoder': 'vitl', 'features': 256, 'out_channels': [256, 512, 1024, 1024]}
-        # }
-        # # Ensure selected encoder exists
-        # if self.encoder not in self.model_configs:
-        #     raise ValueError(f"Unknown encoder {encoder}. Choose from: {list(self.model_configs.keys())}")
-        
-        # model = DepthAnythingV2(**model_configs[encoder])
-        # model.load_state_dict(torch.load('depth_anything_vitl14.pth'))
-        # Correctly initialize the model architecture before loading weights
-        # self.model = DepthAnythingV2(**self.model_configs[encoder])
-        # self.model = DepthAnythingV2(**model_configs[self.encoder])
-        # if self.custom_checkpoint and os.path.exists(self.custom_checkpoint):
-        #     print(f"✓ Loading weights from: {self.custom_checkpoint}")
-        #     # Map location ensures weights load to the correct device
-        #     state_dict = torch.load(self.custom_checkpoint, map_location='cpu')
-        #     self.model.load_state_dict(state_dict)
-        # else:
-        #     print(f"⚠ Checkpoint not found at {self.custom_checkpoint}. Using random weights.")
-
-        # self.model.to(self.device).eval()
-        
-        # Calibration parameters
-        
-        # try:
-        #     # Initialize the correct class with specific config
-        #     from dpt import DepthAnythingV2
-        #     self.model = DepthAnythingV2(**model_configs[encoder])
-            
-        #     # 3. LOAD WEIGHTS
-        #     if self.custom_checkpoint and os.path.exists(self.custom_checkpoint):
-        #         state_dict = torch.load(self.custom_checkpoint, map_location='cpu')
-        #         # Handle cases where state_dict is nested
-        #         if 'model' in state_dict:
-        #             state_dict = state_dict['model']
-                
-        #         self.model.load_state_dict(state_dict)
-        #         print(f"✓ Model loaded successfully!")
-        #         print(f"  Architecture: {encoder.upper()}")
-            
-        #     self.model.to(self.device).eval()
-            
-        # except Exception as e:
-        #     print(f"❌ Error loading model: {e}")
-        #     self.model = None
-        #     raise e
-    # def _load_model(self):
-    #     """Load Depth Anything V2 model."""
-    #     print("\nLoading Depth Anything V2 model...")
-        
-    #     checkpoint_path = self.custom_checkpoint or r"D:\Codes\vscode\Pretrained_weights\depth_anything_v2\latest20.pth"
-        
-    #     if not os.path.exists(checkpoint_path):
-    #         raise FileNotFoundError(f"Checkpoint not found: {checkpoint_path}")
-        
-    #     print(f"  Checkpoint: {os.path.basename(checkpoint_path)}")
-        
-    #     try:
-    #         # Import Depth Anything V2
-    #         import sys
-    #         sys.path.insert(0, r"D:\Codes\vscode\Depth_Anything_V2_main\metric_depth")
-    #         from depth_anything_v2.dpt import DepthAnythingV2
-            
-    #         # Model configuration (vitb - base model)
-    #         # model_config = {
-    #         #     'encoder': 'vitb',
-    #         #     'features': 128,
-    #         #     'out_channels': [96, 192, 384, 768]
-    #         # }
-    #         model_configs = {
-    #         'vits': {'encoder': 'vits', 'features': 64, 'out_channels': [48, 96, 192, 384]},
-    #         'vitb': {'encoder': 'vitb', 'features': 128, 'out_channels': [96, 192, 384, 768]},
-    #         'vitl': {'encoder': 'vitl', 'features': 256, 'out_channels': [256, 512, 1024, 1024]}
-    #     }
-    #         # Load checkpoint
-    #         checkpoint = torch.load(checkpoint_path, map_location='cpu', weights_only=False)
-            
-    #         if 'model' in checkpoint:
-    #             state_dict = checkpoint['model']
-    #         elif 'state_dict' in checkpoint:
-    #             state_dict = checkpoint['state_dict']
-    #         else:
-    #             state_dict = checkpoint
-            
-    #         # Initialize model
-    #         self.model = DepthAnythingV2(**model_config)
-    #         self.model.load_state_dict(state_dict, strict=False)
-    #         self.model.to(self.device)
-    #         self.model.eval()
-            
-    #         print(f"✓ Model loaded successfully!")
-    #         print(f"  Architecture: Vision Transformer Base (ViT-B)")
-    #         print(f"  Ready for inference\n")
-            
-    #     except Exception as e:
-    #         print(f"❌ Error loading model: {e}")
-    #         import traceback
-    #         traceback.print_exc()
-    #         raise
+   
     
     def estimate_depth(self, image, return_raw=False):
         """
