@@ -640,7 +640,7 @@ class VRKeyboardCVPR2026:
 
     def __init__(
         self,
-        annotation_file: str = 'keyboard_annotations.json',
+        annotation_file: str = './asstes/keyboard_annotations.json',
         depth_checkpoint: str = None,
         threshold_cm: float = 0.8,
         camera_id: int = 0,
