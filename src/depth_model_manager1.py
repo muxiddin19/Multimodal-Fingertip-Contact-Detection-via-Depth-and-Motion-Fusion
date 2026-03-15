@@ -76,7 +76,7 @@ class DepthEstimator:
         self.scale = 1.0
         self.offset = 0.0
         self.is_calibrated = False
-        self.model = self._load_model()
+        self.model = self._load_model() 
     def _load_model(self):
  
     #     # Configuration for Depth Anything V2
@@ -89,10 +89,10 @@ class DepthEstimator:
             'vitl': {'encoder': 'vitl', 'features': 256, 'out_channels': [256, 512, 1024, 1024], 'max_depth': 0.4}, #20.0
         }
         
-        config = model_configs.get(self.encoder, model_configs['vits'])
+        config = model_configs.get(self.encoder, model_configs['vits']) 
         
             # ← ADD THIS PRINT:
-        print(f"  Config features: {config['features']}")
+        print(f"  Config features: {config['features']}") 
         print(f"  Config out_channels: {config['out_channels']}")
         print(f"  Config max_depth: {config['max_depth']}")
 
