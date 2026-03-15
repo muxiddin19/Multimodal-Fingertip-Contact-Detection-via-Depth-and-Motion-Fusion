@@ -620,7 +620,8 @@ class VRKeyboardCVPR2026:
             print("\n[LOADING] Depth model ...")
             # Use the working model
             #checkpoint = r"D:\Codes\vscode\Pretrained_weights\depth_anything_v2_s\latest32.pth"
-            checkpoint = r"D:\Codes\vscode\Pretrained_weights\depth_anything_v2_vits.pth"
+            # checkpoint = r"D:\Codes\vscode\Pretrained_weights\depth_anything_v2_vits.pth"
+            checkpoint = r"D:\Codes\vscode\Pretrained_weights\latest_dav2_20260313.pth"
             # In vr_keyboard_cvpr2026_v6.py, line ~738:
             # checkpoint = r"D:\Codes\vscode\Pretrained_weights\depth_anything_v2_metric_hypersim_vits.pth"
             self.depth_estimator = DepthEstimator(
