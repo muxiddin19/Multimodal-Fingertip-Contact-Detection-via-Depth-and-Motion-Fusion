@@ -792,7 +792,14 @@ class VRKeyboardCVPR2026:
         
         # Calculate scale factor
         self.actual_distance_m = known_distance_cm / 100.0
+        # self.depth_scale_factor = self.actual_distance_m / median_depth if median_depth > 0 else 1.0
+        # changes here for metric depth model:
+        # With max_depth=0.4, model outputs metric depth directly
+        # Scale factor should be ~1.0 if model is correctly configured
         self.depth_scale_factor = self.actual_distance_m / median_depth if median_depth > 0 else 1.0
+        if abs(self.depth_scale_factor - 1.0) > 0.3:
+            print(f"  WARNING: scale_factor={self.depth_scale_factor:.3f} is far from 1.0")
+            print(f"  Check that max_depth=0.4 in depth_model_manager")
         self.keyboard_surface_depth = self.actual_distance_m
         self.is_calibrated = True
         
