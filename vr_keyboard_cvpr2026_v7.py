@@ -631,15 +631,16 @@ class VRKeyboardCVPR2026:
  
             # Use specified checkpoint or default
             #Changed here
-            self.depth_checkpoint_path = depth_checkpoint
+            # self.depth_checkpoint_path = depth_checkpoint
 
-            if self.depth_checkpoint_path is None:
+            # if self.depth_checkpoint_path is None:
 
-                checkpoint = r"D:\Codes\vscode\Pretrained_weights\depth_anything_v2_vits.pth"
+            #     checkpoint = r"D:\Codes\vscode\Pretrained_weights\depth_anything_v2_vits.pth"
  
 
-            # NEW:
-            self.depth_estimator = DepthEstimator(custom_checkpoint=self.depth_checkpoint_path)
+            # # NEW:
+            # self.depth_estimator = DepthEstimator(custom_checkpoint=self.depth_checkpoint_path)
+            self.depth_checkpoint_path = checkpoint
         else:
             print("\n[WARNING] Depth model not available - using mock depth")
             self.depth_estimator = None
@@ -659,8 +660,8 @@ class VRKeyboardCVPR2026:
         self.hands = self.mp_hands.Hands(
             static_image_mode=False,
             max_num_hands=2,
-            min_detection_confidence=0.6, #0.4,
-            min_tracking_confidence=0.6, #0.5,
+            min_detection_confidence=0.4, #0.6,
+            min_tracking_confidence=0.4, #0.6,
             model_complexity=1  # Use higher complexity for better accuracy
         )
         self.mp_draw = mp.solutions.drawing_utils
@@ -721,9 +722,24 @@ class VRKeyboardCVPR2026:
                 self.mp_hands.HandLandmark.PINKY_TIP,
             ]
         else:
+            # Track BOTH index fingers (2 hands) for ~2x WPM
             self.fingertip_landmarks = [
                 self.mp_hands.HandLandmark.INDEX_FINGER_TIP,
             ]
+
+        # self.track_all_fingers = track_all_fingers
+        # if track_all_fingers:
+        #     self.fingertip_landmarks = [
+        #         self.mp_hands.HandLandmark.THUMB_TIP,
+        #         self.mp_hands.HandLandmark.INDEX_FINGER_TIP,
+        #         self.mp_hands.HandLandmark.MIDDLE_FINGER_TIP,
+        #         self.mp_hands.HandLandmark.RING_FINGER_TIP,
+        #         self.mp_hands.HandLandmark.PINKY_TIP,
+        #     ]
+        # else:
+        #     self.fingertip_landmarks = [
+        #         self.mp_hands.HandLandmark.INDEX_FINGER_TIP,
+        #     ]
 
         # Performance tracking
         self.fps = 0
