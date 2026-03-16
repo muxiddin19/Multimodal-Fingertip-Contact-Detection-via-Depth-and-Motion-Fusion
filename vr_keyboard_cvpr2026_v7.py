@@ -703,7 +703,7 @@ class VRKeyboardCVPR2026:
         # State
         self.typed_text = ""
         self.last_keys_pressed = {}
-        self.shift_active = False
+        self.shift_active = False  
         self.caps_lock = False
 
         # Depth frame skip for performance (reduced for speed)
@@ -724,13 +724,12 @@ class VRKeyboardCVPR2026:
         else:
             # Track BOTH index fingers (2 hands) for ~2x WPM  
             self.fingertip_landmarks = [
-                self.mp_hands.HandLandmark.INDEX_FINGER_TIP,
+                self.mp_hands.HandLandmark.INDEX_FINGER_TIP,  
             ]
-
-        # self.track_all_fingers = track_all_fingers
+          # self.track_all_fingers = track_all_fingers
         # if track_all_fingers:
-        #     self.fingertip_landmarks = [
-        #         self.mp_hands.HandLandmark.THUMB_TIP,
+        #     self.fingertip_landmarks = [  
+        #         self.mp_hands.HandLandmark.THUMB_TIP,   
         #         self.mp_hands.HandLandmark.INDEX_FINGER_TIP,
         #         self.mp_hands.HandLandmark.MIDDLE_FINGER_TIP,
         #         self.mp_hands.HandLandmark.RING_FINGER_TIP,
