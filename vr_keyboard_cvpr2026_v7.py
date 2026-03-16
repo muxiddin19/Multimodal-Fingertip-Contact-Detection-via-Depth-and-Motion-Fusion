@@ -722,7 +722,7 @@ class VRKeyboardCVPR2026:
                 self.mp_hands.HandLandmark.PINKY_TIP,
             ]
         else:
-            # Track BOTH index fingers (2 hands) for ~2x WPM
+            # Track BOTH index fingers (2 hands) for ~2x WPM  
             self.fingertip_landmarks = [
                 self.mp_hands.HandLandmark.INDEX_FINGER_TIP,
             ]
