@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Real-Time Multimodal Fingertip Contact Detection - CVPR 2026</title>
+    <meta name="description" content="Real-Time Multimodal Fingertip Contact Detection via Depth and Motion Fusion for Vision-Based Human-Computer Interaction. CVPR 2026.">
+    <meta name="keywords" content="depth estimation, contact detection, virtual keyboard, hand tracking, CVPR 2026">
+
+    <!-- Google Scholar meta -->
+    <meta name="citation_title" content="Real-Time Multimodal Fingertip Contact Detection via Depth and Motion Fusion for Vision-Based Human-Computer Interaction">
+    <meta name="citation_author" content="Toshpulatov, Mukhiddin">
+    <meta name="citation_publication_date" content="2026">
+    <meta name="citation_conference_title" content="IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)">
+
+    <!-- Bulma CSS -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@0.9.4/css/bulma.min.css">
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <style>
+        .publication-title { font-size: 2.2rem; font-weight: 700; }
+        .publication-authors { font-size: 1.1rem; }
+        .publication-venue { font-size: 1.1rem; color: #363636; font-weight: 600; }
+        .publication-links .button { margin: 0.3rem; }
+        .hero-body { padding-bottom: 1rem; }
+        .results-table th, .results-table td { text-align: center; padding: 0.5em 1em; }
+        .results-table .best { font-weight: bold; color: #00947e; }
+        .bibtex-body { background: #f5f5f5; padding: 1.5rem; border-radius: 6px; }
+        .bibtex-body pre { white-space: pre-wrap; font-size: 0.85rem; }
+        section { padding: 2rem 1.5rem; }
+        .method-image { max-width: 90%; margin: 0 auto; display: block; }
+        footer { padding: 2rem 1.5rem; background: #f5f5f5; }
+    </style>
+</head>
+<body>
+
+<!-- Hero / Title -->
+<section class="hero is-light">
+    <div class="hero-body">
+        <div class="container has-text-centered">
+            <p class="publication-venue">CVPR 2026</p>
+            <h1 class="publication-title">
+                Real-Time Multimodal Fingertip Contact Detection<br>
+                via Depth and Motion Fusion for<br>
+                Vision-Based Human-Computer Interaction
+            </h1>
+            <br>
+            <p class="publication-authors">
+                <a href="https://orcid.org/0000-0002-8819-852X">Mukhiddin Toshpulatov</a><sup>1,2</sup>
+                <!-- Add co-authors here -->
+            </p>
+            <p class="is-size-6" style="margin-top: 0.5rem;">
+                <sup>1</sup>KAIST SpaceTop Research Center &nbsp;&nbsp;
+                <sup>2</sup>VoiceAI Research Lab, Inha University
+            </p>
+            <br>
+
+            <!-- Links -->
+            <div class="publication-links">
+                <a class="button is-rounded is-dark" href="#">
+                    <span class="icon"><i class="fas fa-file-pdf"></i></span>
+                    <span>Paper</span>
+                </a>
+                <a class="button is-rounded is-dark" href="#">
+                    <span class="icon"><i class="ai ai-arxiv"></i></span>
+                    <span>arXiv</span>
+                </a>
+                <a class="button is-rounded is-dark" href="https://github.com/muxiddin19/Multimodal-Fingertip-Contact-Detection-via-Depth-and-Motion-Fusion">
+                    <span class="icon"><i class="fab fa-github"></i></span>
+                    <span>Code</span>
+                </a>
+                <a class="button is-rounded is-dark" href="#">
+                    <span class="icon"><i class="fas fa-database"></i></span>
+                    <span>Dataset</span>
+                </a>
+                <a class="button is-rounded is-dark" href="#">
+                    <span class="icon"><i class="fas fa-cube"></i></span>
+                    <span>Models</span>
+                </a>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Teaser -->
+<section class="section">
+    <div class="container">
+        <div class="has-text-centered">
+            <img src="../images/demo.PNG" alt="Teaser" class="method-image" style="max-width: 80%;">
+        </div>
+    </div>
+</section>
+
+<!-- Abstract -->
+<section class="section">
+    <div class="container" style="max-width: 800px;">
+        <h2 class="title is-3 has-text-centered">Abstract</h2>
+        <p class="content has-text-justified">
+            We present a real-time system for detecting fingertip contact events on flat surfaces using monocular depth estimation and motion analysis.
+            Our approach fine-tunes Depth Anything V2 on a custom close-range dataset captured with an Intel RealSense D405 depth camera,
+            reducing mean absolute depth error from 12.8mm to 3.2mm in the 25-45cm operating range.
+            Contact detection employs a velocity-gated hysteresis state machine that fuses depth-based surface distance
+            (4.5mm entry / 6.0mm exit thresholds) with fingertip motion velocity cues, achieving 94.2% accuracy and 94.4% F1-score.
+            The system operates at 30 FPS on consumer hardware, enabling practical vision-based virtual keyboard interaction
+            at 45.6 words per minute with 3.1% character error rate.
+            We release a multi-user, multi-angle D405 depth dataset comprising 51,787 RGB-depth pairs from 15 participants
+            at four camera angles, with per-frame hand landmark annotations and contact/hover labels.
+        </p>
+    </div>
+</section>
+
+<!-- Method -->
+<section class="section" style="background: #fafafa;">
+    <div class="container">
+        <h2 class="title is-3 has-text-centered">Method</h2>
+        <div class="columns is-centered" style="margin-top: 2rem;">
+            <div class="column is-10">
+                <img src="../images/depth_tracker_demo.PNG" alt="System Pipeline" class="method-image">
+                <p class="has-text-centered is-size-6" style="margin-top: 1rem; color: #666;">
+                    <strong>System Pipeline.</strong> An RGB camera captures the typing scene.
+                    Our fine-tuned Depth Anything V2 estimates metric depth, from which fingertip-to-surface distances are computed.
+                    A velocity-gated hysteresis state machine fuses depth distance and fingertip motion to detect contact events in real-time.
+                </p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Results -->
+<section class="section">
+    <div class="container">
+        <h2 class="title is-3 has-text-centered">Results</h2>
+
+        <div class="columns is-centered" style="margin-top: 2rem;">
+            <div class="column is-5">
+                <h4 class="title is-5 has-text-centered">Depth Estimation</h4>
+                <table class="table is-striped is-hoverable is-fullwidth results-table">
+                    <thead>
+                        <tr><th>Model</th><th>MAE (mm)</th><th>&delta;1 (%)</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr><td>DA2-ViTS (pre-trained)</td><td>12.8</td><td>38.2</td></tr>
+                        <tr><td><strong>Ours (fine-tuned)</strong></td><td class="best">3.2</td><td class="best">96.2</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <div class="column is-5">
+                <h4 class="title is-5 has-text-centered">Contact Detection</h4>
+                <table class="table is-striped is-hoverable is-fullwidth results-table">
+                    <thead>
+                        <tr><th>Method</th><th>Acc (%)</th><th>F1 (%)</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr><td>Depth only</td><td>87.3</td><td>86.1</td></tr>
+                        <tr><td>Velocity only</td><td>89.1</td><td>88.5</td></tr>
+                        <tr><td><strong>Ours (fusion)</strong></td><td class="best">94.2</td><td class="best">94.4</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Qualitative results placeholder -->
+        <div class="has-text-centered" style="margin-top: 2rem;">
+            <h4 class="title is-5">Qualitative Results</h4>
+            <img src="../images/demo.PNG" alt="Qualitative comparison" class="method-image" style="max-width: 85%;">
+            <p class="is-size-6" style="margin-top: 0.5rem; color: #666;">
+                <strong>Left:</strong> Pre-trained DA2 depth map (noisy at close range).
+                <strong>Right:</strong> Our fine-tuned model (accurate metric depth with clear hand-surface separation).
+            </p>
+        </div>
+    </div>
+</section>
+
+<!-- Dataset -->
+<section class="section" style="background: #fafafa;">
+    <div class="container">
+        <h2 class="title is-3 has-text-centered">Dataset</h2>
+        <div class="columns is-centered" style="margin-top: 1rem;">
+            <div class="column is-8">
+                <table class="table is-striped is-hoverable is-fullwidth results-table">
+                    <tbody>
+                        <tr><td><strong>Total frames</strong></td><td>51,787 RGB-depth pairs</td></tr>
+                        <tr><td><strong>Participants</strong></td><td>15 users</td></tr>
+                        <tr><td><strong>Camera angles</strong></td><td>30&deg;, 45&deg;, 60&deg;, 90&deg;</td></tr>
+                        <tr><td><strong>Depth sensor</strong></td><td>Intel RealSense D405 (640x480, 30 FPS)</td></tr>
+                        <tr><td><strong>Depth accuracy</strong></td><td>&lt;0.5mm at 35cm</td></tr>
+                        <tr><td><strong>Annotations</strong></td><td>21 hand landmarks + 5 fingertip depths per frame</td></tr>
+                        <tr><td><strong>Labels</strong></td><td>Per-fingertip contact/hover state</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Video (placeholder) -->
+<section class="section">
+    <div class="container has-text-centered">
+        <h2 class="title is-3">Demo Video</h2>
+        <p class="is-size-5" style="color: #999;">Coming soon</p>
+        <!-- Replace with:
+        <div style="max-width: 720px; margin: 0 auto;">
+            <div style="position:relative;padding-bottom:56.25%;height:0;overflow:hidden;">
+                <iframe src="https://www.youtube.com/embed/VIDEO_ID"
+                        style="position:absolute;top:0;left:0;width:100%;height:100%;"
+                        frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                        allowfullscreen></iframe>
+            </div>
+        </div>
+        -->
+    </div>
+</section>
+
+<!-- BibTeX -->
+<section class="section" style="background: #fafafa;">
+    <div class="container" style="max-width: 700px;">
+        <h2 class="title is-3 has-text-centered">BibTeX</h2>
+        <div class="bibtex-body">
+            <pre><code>@inproceedings{toshpulatov2026realtime,
+  title={Real-Time Multimodal Fingertip Contact Detection via Depth and
+         Motion Fusion for Vision-Based Human-Computer Interaction},
+  author={Toshpulatov, Mukhiddin},
+  booktitle={Proceedings of the IEEE/CVF Conference on Computer Vision
+             and Pattern Recognition (CVPR)},
+  year={2026}
+}</code></pre>
+        </div>
+    </div>
+</section>
+
+<!-- Footer -->
+<footer>
+    <div class="container has-text-centered">
+        <p>
+            This page template is adapted from
+            <a href="https://github.com/eliahuhorwitz/Academic-project-page-template">Academic Project Page Template</a>.
+        </p>
+    </div>
+</footer>
+
+</body>
+</html>

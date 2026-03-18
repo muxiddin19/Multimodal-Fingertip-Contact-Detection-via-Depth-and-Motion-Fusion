@@ -1,0 +1,18 @@
+cff-version: 1.2.0
+message: "If you find this work useful, please cite it as below."
+authors:
+  - family-names: "Toshpulatov"
+    given-names: "Mukhiddin"
+    orcid: "https://orcid.org/0000-0002-8819-852X"
+    affiliation: "VoiceAI Research Lab, Inha University"
+title: "Real-Time Multimodal Fingertip Contact Detection via Depth and Motion Fusion for Vision-Based Human-Computer Interaction"
+date-released: 2026-06-01
+url: "https://github.com/muxiddin19/Multimodal-Fingertip-Contact-Detection-via-Depth-and-Motion-Fusion"
+preferred-citation:
+  type: conference-paper
+  authors:
+    - family-names: "Toshpulatov"
+      given-names: "Mukhiddin"
+  title: "Real-Time Multimodal Fingertip Contact Detection via Depth and Motion Fusion for Vision-Based Human-Computer Interaction"
+  collection-title: "Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)"
+  year: 2026
