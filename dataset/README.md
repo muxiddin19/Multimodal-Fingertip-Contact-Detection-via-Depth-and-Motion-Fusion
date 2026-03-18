@@ -6,7 +6,7 @@ Multi-user, multi-angle RGB-depth dataset captured with Intel RealSense D405 for
 
 | Property | Value |
 |----------|-------|
-| Total frames | 51,787 RGB-depth pairs |
+| Total frames | 53,300 RGB-depth pairs |
 | Participants | 15 users (P01-P18) |
 | Camera angles | 30°, 45°, 60°, 90° |
 | Resolution | 640 x 480 |
@@ -52,9 +52,9 @@ Participant-stratified (no identity leakage):
 
 | Split | Samples | Participants |
 |-------|---------|-------------|
-| Train | 40,209 | P01, P03, P04, P06, P07, P09-P12, P17, P18 |
-| Val | 2,557 | P13, P16 |
-| Test | 9,021 | P05, P08 |
+| Train | 42,640 | P01, P03, P04, P06, P07, P09-P12, P17, P18 |
+| Val | 5,330 | P13, P16 |
+| Test | 5,330 | P05, P08 |
 
 Split files are at `../depth_finetuning/splits/custom_d405/`.
 
