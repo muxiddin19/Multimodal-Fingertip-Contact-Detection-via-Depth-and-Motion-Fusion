@@ -9,7 +9,7 @@ Fine-tuning code for [Depth Anything V2 ViT-S](https://github.com/DepthAnything/
 | `train.py` | Training script with DDP, SiLog loss, cosine LR, gradient accumulation |
 | `dataset/custom_depth_dataset.py` | RGB-depth pair loader with ImageNet normalization and augmentation |
 | `configs/train_d405.sh` | Training launcher with paper-matched hyperparameters |
-| `splits/custom_d405/` | Train/val/test split files (participant-stratified, 51,787 frames) |
+| `splits/custom_d405/` | Train/val/test split files (participant-stratified, 53,300 frames) |
 | `FINETUNING.md` | Detailed training configuration, monitoring, evaluation, and troubleshooting |
 
 ## Prerequisites
