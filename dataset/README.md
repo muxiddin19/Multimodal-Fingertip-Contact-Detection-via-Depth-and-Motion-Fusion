@@ -18,6 +18,8 @@ Multi-user, multi-angle RGB-depth dataset captured with Intel RealSense D405 for
 
 ## Download
 
+[![HuggingFace](https://img.shields.io/badge/%F0%9F%A4%97-Dataset-orange.svg)](https://huggingface.co/datasets/muxiddin19/d405-hand-surface-depth)
+
 **HuggingFace**: [muxiddin19/d405-hand-surface-depth](https://huggingface.co/datasets/muxiddin19/d405-hand-surface-depth)
 
 ## Data Structure

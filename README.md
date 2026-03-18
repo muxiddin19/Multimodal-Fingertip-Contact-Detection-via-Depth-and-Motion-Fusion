@@ -17,6 +17,8 @@
   <a href="LICENSE"><img alt="License: Apache 2.0" src="https://img.shields.io/badge/License-Apache_2.0-blue.svg"></a>
   <a href="#"><img alt="arXiv" src="https://img.shields.io/badge/arXiv-XXXX.XXXXX-b31b1b.svg"></a>
   <a href="https://muxiddin19.github.io/Multimodal-Fingertip-Contact-Detection-via-Depth-and-Motion-Fusion/"><img alt="Project Page" src="https://img.shields.io/badge/Project-Page-green.svg"></a>
+  <a href="https://huggingface.co/muxiddin19/vrkeyb-cvpr2026"><img alt="HuggingFace Models" src="https://img.shields.io/badge/%F0%9F%A4%97-Models-yellow.svg"></a>
+  <a href="https://huggingface.co/datasets/muxiddin19/d405-hand-surface-depth"><img alt="HuggingFace Dataset" src="https://img.shields.io/badge/%F0%9F%A4%97-Dataset-orange.svg"></a>
 </p>
 
 <p align="center">
@@ -111,6 +113,60 @@ python vr_keyboard_cvpr2026_v7.py
 
 Each subfolder contains its own `README.md` with detailed instructions.
 
+## Calibration Tools
+
+Before running the VR keyboard, two calibration steps are needed to map the physical keyboard layout and per-key depth ranges.
+
+### Keyboard Annotation Tool
+
+Defines the 2D bounding polygon (4 corners) of every keycap as seen by the camera. This creates the spatial mapping from pixel coordinates to key identities.
+
+```bash
+python src/keyboard_annotation.py
+```
+
+| Control | Action |
+|---------|--------|
+| `C` | Capture/freeze current frame |
+| Click × 4 | Define keycap corners (quadrilateral) |
+| Type label | Assign key name (e.g., `A`, `SPACE`) |
+| `+` / `-` | Zoom in/out for precise placement |
+| `S` | Save annotations to `assets/keyboard_annotations.json` |
+
+Each key is stored as a 4-point polygon and matched at runtime using `cv2.pointPolygonTest()`.
+
+### Depth Threshold Calibration
+
+Determines the min/max depth range of the fingertip when physically touching each keycap. This creates per-key depth thresholds for press detection.
+
+```bash
+python src/depth_tracker.py
+```
+
+| Control | Action |
+|---------|--------|
+| `SPACE` | Start/stop recording depth for current key |
+| `R` | Reset current recording |
+| `Q` | Quit |
+
+Output: `assets/key_thresholds.json` — maps each key to `[min_depth, max_depth]` in meters.
+
+<details>
+<summary>Example key_thresholds.json</summary>
+
+```json
+{
+  "a": [0.265, 0.278],
+  "s": [0.267, 0.280],
+  "space": [0.270, 0.285]
+}
+```
+
+Depth ranges are typically ~10–15 mm per key, clustered around 26–29 cm from the camera.
+</details>
+
+> These calibration tools were originally developed in [camera-based_keyboard](https://github.com/muxiddin19/camera-based_keyboard), our earlier depth-camera-based keyboard prototype using Intel RealSense hardware depth. The current system extends this approach with monocular depth estimation via fine-tuned Depth Anything V2.
+
 ## Contact Detection Method
 
 The system uses a **velocity-gated hysteresis state machine** that fuses:
@@ -140,6 +196,10 @@ The system uses a **velocity-gated hysteresis state machine** that fuses:
 ## License
 
 This project is released under the [Apache 2.0 License](LICENSE).
+
+## Related Projects
+
+- [camera-based_keyboard](https://github.com/muxiddin19/camera-based_keyboard) — our earlier depth-camera-based keyboard prototype using Intel RealSense hardware depth, with keyboard annotation and per-key depth threshold calibration tools
 
 ## Acknowledgements
 
