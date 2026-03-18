@@ -52,9 +52,9 @@ Participant-stratified (no identity leakage):
 
 | Split | Samples | Participants |
 |-------|---------|-------------|
-| Train | 41,722 | P01, P03, P04, P06, P07, P09-P12, P17, P18 + supplementary |
-| Val | 2,557 | P13, P16 |
-| Test | 9,021 | P05, P08 |
+| Train | 42,640 | P01, P03, P04, P06, P07, P09–P13, P18 + supplementary |
+| Val | 5,330 | P05, P16 + supplementary |
+| Test | 5,330 | P08, P17 + supplementary |
 
 Split files are at `../depth_finetuning/splits/custom_d405/`.
 

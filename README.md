@@ -3,9 +3,12 @@
   <p align="center">
     <strong>CVPR 2026</strong>
     <br />
-    <a href="https://orcid.org/0000-0002-8819-852X">Mukhiddin Toshpulatov</a><sup>1,2</sup>
+    <a href="https://orcid.org/0000-0002-8819-852X">Mukhiddin Toshpulatov</a><sup>1,2,4,5</sup> &middot;
+    Wookey Lee<sup>2</sup> &middot;
+    Suan Lee<sup>3</sup> &middot;
+    Geehyuk Lee<sup>1</sup>
     <br />
-    <sup>1</sup>KAIST SpaceTop Research Center &nbsp;&nbsp; <sup>2</sup>VoiceAI Research Lab, Inha University
+    <sup>1</sup>KAIST &nbsp;&nbsp; <sup>2</sup>BMSE, Inha University &nbsp;&nbsp; <sup>3</sup>Semyung University &nbsp;&nbsp; <sup>4</sup>Gachon University &nbsp;&nbsp; <sup>5</sup>South Korea
   </p>
 </p>
 
@@ -127,7 +130,7 @@ The system uses a **velocity-gated hysteresis state machine** that fuses:
 @inproceedings{toshpulatov2026realtime,
   title={Real-Time Multimodal Fingertip Contact Detection via Depth and Motion
          Fusion for Vision-Based Human-Computer Interaction},
-  author={Toshpulatov, Mukhiddin},
+  author={Toshpulatov, Mukhiddin and Lee, Wookey and Lee, Suan and Lee, Geehyuk},
   booktitle={Proceedings of the IEEE/CVF Conference on Computer Vision
              and Pattern Recognition (CVPR)},
   year={2026}
