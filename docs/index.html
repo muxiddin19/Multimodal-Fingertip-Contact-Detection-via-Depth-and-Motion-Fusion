@@ -10,6 +10,9 @@
     <!-- Google Scholar meta -->
     <meta name="citation_title" content="Real-Time Multimodal Fingertip Contact Detection via Depth and Motion Fusion for Vision-Based Human-Computer Interaction">
     <meta name="citation_author" content="Toshpulatov, Mukhiddin">
+    <meta name="citation_author" content="Lee, Wookey">
+    <meta name="citation_author" content="Lee, Suan">
+    <meta name="citation_author" content="Lee, Geehyuk">
     <meta name="citation_publication_date" content="2026">
     <meta name="citation_conference_title" content="IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)">
 
@@ -17,6 +20,8 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@0.9.4/css/bulma.min.css">
     <!-- Font Awesome -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Academicons for arXiv icon -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/academicons/1.9.4/css/academicons.min.css">
 
     <style>
         .publication-title { font-size: 2.2rem; font-weight: 700; }
@@ -29,8 +34,11 @@
         .bibtex-body { background: #f5f5f5; padding: 1.5rem; border-radius: 6px; }
         .bibtex-body pre { white-space: pre-wrap; font-size: 0.85rem; }
         section { padding: 2rem 1.5rem; }
-        .method-image { max-width: 90%; margin: 0 auto; display: block; }
+        .method-image { max-width: 90%; margin: 0 auto; display: block; border-radius: 8px; }
         footer { padding: 2rem 1.5rem; background: #f5f5f5; }
+        .highlight-box { background: #e8f5e9; border-left: 4px solid #00947e; padding: 1rem 1.5rem; border-radius: 4px; margin: 1rem 0; }
+        .highlight-box strong { color: #00947e; }
+        .image-caption { text-align: center; margin-top: 0.75rem; color: #666; font-size: 0.9rem; }
     </style>
 </head>
 <body>
@@ -75,11 +83,11 @@
                     <span class="icon"><i class="fab fa-github"></i></span>
                     <span>Code</span>
                 </a>
-                <a class="button is-rounded is-dark" href="#">
+                <a class="button is-rounded is-dark" href="https://huggingface.co/datasets/muxiddin19/d405-hand-surface-depth">
                     <span class="icon"><i class="fas fa-database"></i></span>
                     <span>Dataset</span>
                 </a>
-                <a class="button is-rounded is-dark" href="#">
+                <a class="button is-rounded is-dark" href="https://huggingface.co/muxiddin19/vrkeyb-cvpr2026">
                     <span class="icon"><i class="fas fa-cube"></i></span>
                     <span>Models</span>
                 </a>
@@ -92,7 +100,27 @@
 <section class="section">
     <div class="container">
         <div class="has-text-centered">
-            <img src="../images/demo.PNG" alt="Teaser" class="method-image" style="max-width: 80%;">
+            <img src="static/demo.PNG" alt="VR Keyboard Demo — Real-time fingertip contact detection with depth estimation" class="method-image" style="max-width: 85%;">
+            <p class="image-caption">
+                <strong>Real-time virtual keyboard demo.</strong> Our system tracks all fingertips, estimates metric depth via fine-tuned Depth Anything V2,
+                and detects contact events using a velocity-gated hysteresis state machine — all at 30 FPS.
+            </p>
+        </div>
+    </div>
+</section>
+
+<!-- Key Highlights -->
+<section class="section" style="padding-top: 0;">
+    <div class="container" style="max-width: 900px;">
+        <div class="columns is-centered">
+            <div class="column is-10">
+                <div class="highlight-box">
+                    <strong>94.2%</strong> contact detection accuracy &nbsp;|&nbsp;
+                    <strong>3.2 mm</strong> depth MAE (4&times; improvement) &nbsp;|&nbsp;
+                    <strong>45.6 WPM</strong> typing speed &nbsp;|&nbsp;
+                    <strong>30 FPS</strong> real-time on RTX 3060 Ti
+                </div>
+            </div>
         </div>
     </div>
 </section>
@@ -104,9 +132,9 @@
         <p class="content has-text-justified">
             We present a real-time system for detecting fingertip contact events on flat surfaces using monocular depth estimation and motion analysis.
             Our approach fine-tunes Depth Anything V2 on a custom close-range dataset captured with an Intel RealSense D405 depth camera,
-            reducing mean absolute depth error from 12.8mm to 3.2mm in the 25-45cm operating range.
+            reducing mean absolute depth error from 12.8 mm to 3.2 mm in the 25&ndash;45 cm operating range.
             Contact detection employs a velocity-gated hysteresis state machine that fuses depth-based surface distance
-            (4.5mm entry / 6.0mm exit thresholds) with fingertip motion velocity cues, achieving 94.2% accuracy and 94.4% F1-score.
+            (4.5 mm entry / 6.0 mm exit thresholds) with fingertip motion velocity cues, achieving 94.2% accuracy and 94.4% F1-score.
             The system operates at 30 FPS on consumer hardware, enabling practical vision-based virtual keyboard interaction
             at 45.6 words per minute with 3.1% character error rate.
             We release a multi-user, multi-angle D405 depth dataset comprising 53,300 RGB-depth pairs from 15 participants
@@ -121,12 +149,27 @@
         <h2 class="title is-3 has-text-centered">Method</h2>
         <div class="columns is-centered" style="margin-top: 2rem;">
             <div class="column is-10">
-                <img src="../images/depth_tracker_demo.PNG" alt="System Pipeline" class="method-image">
-                <p class="has-text-centered is-size-6" style="margin-top: 1rem; color: #666;">
+                <img src="static/depth_tracker_demo.PNG" alt="System Pipeline" class="method-image">
+                <p class="image-caption">
                     <strong>System Pipeline.</strong> An RGB camera captures the typing scene.
                     Our fine-tuned Depth Anything V2 estimates metric depth, from which fingertip-to-surface distances are computed.
                     A velocity-gated hysteresis state machine fuses depth distance and fingertip motion to detect contact events in real-time.
                 </p>
+            </div>
+        </div>
+
+        <!-- Method details -->
+        <div class="columns is-centered" style="margin-top: 2rem;">
+            <div class="column is-8">
+                <h4 class="title is-5">Velocity-Gated Hysteresis State Machine</h4>
+                <table class="table is-striped is-hoverable is-fullwidth results-table">
+                    <tbody>
+                        <tr><td><strong>Contact entry threshold</strong></td><td>4.5 mm (fingertip-to-surface)</td></tr>
+                        <tr><td><strong>Contact exit threshold</strong></td><td>6.0 mm (hysteresis prevents flicker)</td></tr>
+                        <tr><td><strong>Cooldown period</strong></td><td>450 ms (~15 frames at 30 FPS)</td></tr>
+                        <tr><td><strong>Depth model</strong></td><td>DA2-ViTS fine-tuned, max_depth=0.5 m</td></tr>
+                    </tbody>
+                </table>
             </div>
         </div>
     </div>
@@ -142,11 +185,11 @@
                 <h4 class="title is-5 has-text-centered">Depth Estimation</h4>
                 <table class="table is-striped is-hoverable is-fullwidth results-table">
                     <thead>
-                        <tr><th>Model</th><th>MAE (mm)</th><th>&delta;1 (%)</th></tr>
+                        <tr><th>Model</th><th>MAE (mm)</th><th>&delta;1 (%)</th><th>RMSE (mm)</th></tr>
                     </thead>
                     <tbody>
-                        <tr><td>DA2-ViTS (pre-trained)</td><td>12.8</td><td>38.2</td></tr>
-                        <tr><td><strong>Ours (fine-tuned)</strong></td><td class="best">3.2</td><td class="best">96.2</td></tr>
+                        <tr><td>DA2-ViTS (pre-trained)</td><td>12.8</td><td>38.2</td><td>15.4</td></tr>
+                        <tr><td><strong>Ours (fine-tuned)</strong></td><td class="best">3.2</td><td class="best">96.2</td><td class="best">5.1</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -154,24 +197,39 @@
                 <h4 class="title is-5 has-text-centered">Contact Detection</h4>
                 <table class="table is-striped is-hoverable is-fullwidth results-table">
                     <thead>
-                        <tr><th>Method</th><th>Acc (%)</th><th>F1 (%)</th></tr>
+                        <tr><th>Method</th><th>Acc (%)</th><th>F1 (%)</th><th>FPR (%)</th></tr>
                     </thead>
                     <tbody>
-                        <tr><td>Depth only</td><td>87.3</td><td>86.1</td></tr>
-                        <tr><td>Velocity only</td><td>89.1</td><td>88.5</td></tr>
-                        <tr><td><strong>Ours (fusion)</strong></td><td class="best">94.2</td><td class="best">94.4</td></tr>
+                        <tr><td>Depth only</td><td>87.3</td><td>86.1</td><td>8.7</td></tr>
+                        <tr><td>Velocity only</td><td>89.1</td><td>88.5</td><td>6.3</td></tr>
+                        <tr><td><strong>Ours (fusion)</strong></td><td class="best">94.2</td><td class="best">94.4</td><td class="best">4.2</td></tr>
                     </tbody>
                 </table>
             </div>
         </div>
 
-        <!-- Qualitative results placeholder -->
+        <!-- Typing Performance -->
+        <div class="columns is-centered" style="margin-top: 1rem;">
+            <div class="column is-5">
+                <h4 class="title is-5 has-text-centered">Typing Performance</h4>
+                <table class="table is-striped is-hoverable is-fullwidth results-table">
+                    <tbody>
+                        <tr><td><strong>WPM</strong></td><td>45.6</td></tr>
+                        <tr><td><strong>CER</strong></td><td>3.1%</td></tr>
+                        <tr><td><strong>F1-Score</strong></td><td>94.4%</td></tr>
+                        <tr><td><strong>Inference</strong></td><td>30 FPS (RTX 3060 Ti)</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- RGB-Depth visualization -->
         <div class="has-text-centered" style="margin-top: 2rem;">
-            <h4 class="title is-5">Qualitative Results</h4>
-            <img src="../images/demo.PNG" alt="Qualitative comparison" class="method-image" style="max-width: 85%;">
-            <p class="is-size-6" style="margin-top: 0.5rem; color: #666;">
-                <strong>Left:</strong> Pre-trained DA2 depth map (noisy at close range).
-                <strong>Right:</strong> Our fine-tuned model (accurate metric depth with clear hand-surface separation).
+            <h4 class="title is-5">Sample RGB-Depth Pairs</h4>
+            <img src="static/rgb_depth_pair.jpg" alt="RGB and metric depth pair from D405" class="method-image" style="max-width: 85%;">
+            <p class="image-caption">
+                <strong>Left:</strong> RGB input from Intel RealSense D405.
+                <strong>Right:</strong> Ground-truth metric depth (TURBO colormap, uint16 millimeters).
             </p>
         </div>
     </div>
@@ -181,6 +239,7 @@
 <section class="section" style="background: #fafafa;">
     <div class="container">
         <h2 class="title is-3 has-text-centered">Dataset</h2>
+
         <div class="columns is-centered" style="margin-top: 1rem;">
             <div class="column is-8">
                 <table class="table is-striped is-hoverable is-fullwidth results-table">
@@ -188,32 +247,49 @@
                         <tr><td><strong>Total frames</strong></td><td>53,300 RGB-depth pairs</td></tr>
                         <tr><td><strong>Participants</strong></td><td>15 users</td></tr>
                         <tr><td><strong>Camera angles</strong></td><td>30&deg;, 45&deg;, 60&deg;, 90&deg;</td></tr>
-                        <tr><td><strong>Depth sensor</strong></td><td>Intel RealSense D405 (640x480, 30 FPS)</td></tr>
-                        <tr><td><strong>Depth accuracy</strong></td><td>&lt;0.5mm at 35cm</td></tr>
+                        <tr><td><strong>Splits</strong></td><td>42,640 / 5,330 / 5,330 (8:1:1)</td></tr>
+                        <tr><td><strong>Depth sensor</strong></td><td>Intel RealSense D405 (640&times;480, 30 FPS)</td></tr>
+                        <tr><td><strong>Depth accuracy</strong></td><td>&lt;0.5 mm at 35 cm</td></tr>
                         <tr><td><strong>Annotations</strong></td><td>21 hand landmarks + 5 fingertip depths per frame</td></tr>
                         <tr><td><strong>Labels</strong></td><td>Per-fingertip contact/hover state</td></tr>
                     </tbody>
                 </table>
             </div>
         </div>
+
+        <!-- Multi-angle samples -->
+        <div class="has-text-centered" style="margin-top: 2rem;">
+            <h4 class="title is-5">Multi-Angle Recording Setup</h4>
+            <img src="static/multi_angle.jpg" alt="Dataset samples at 30, 45, 60, and 90 degree camera angles" class="method-image" style="max-width: 60%;">
+            <p class="image-caption">
+                Data captured at four camera angles: 30&deg; (top-left), 45&deg; (top-right), 60&deg; (bottom-left), 90&deg; overhead (bottom-right).
+            </p>
+        </div>
+
+        <!-- Dataset samples -->
+        <div class="has-text-centered" style="margin-top: 2rem;">
+            <h4 class="title is-5">Dataset Samples (RGB + Depth)</h4>
+            <img src="static/dataset_samples.jpg" alt="Dataset samples showing RGB and depth pairs" class="method-image" style="max-width: 85%;">
+            <p class="image-caption">
+                Three example frames from the dataset. <strong>Left:</strong> RGB input. <strong>Right:</strong> Metric depth from D405 (TURBO colormap).
+                Hands at varying poses and distances from the keyboard surface.
+            </p>
+        </div>
+
+        <div class="has-text-centered" style="margin-top: 1.5rem;">
+            <a class="button is-rounded is-link" href="https://huggingface.co/datasets/muxiddin19/d405-hand-surface-depth">
+                <span class="icon"><i class="fas fa-download"></i></span>
+                <span>Download Dataset on HuggingFace</span>
+            </a>
+        </div>
     </div>
 </section>
 
-<!-- Video (placeholder) -->
+<!-- Video -->
 <section class="section">
     <div class="container has-text-centered">
         <h2 class="title is-3">Demo Video</h2>
         <p class="is-size-5" style="color: #999;">Coming soon</p>
-        <!-- Replace with:
-        <div style="max-width: 720px; margin: 0 auto;">
-            <div style="position:relative;padding-bottom:56.25%;height:0;overflow:hidden;">
-                <iframe src="https://www.youtube.com/embed/VIDEO_ID"
-                        style="position:absolute;top:0;left:0;width:100%;height:100%;"
-                        frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                        allowfullscreen></iframe>
-            </div>
-        </div>
-        -->
     </div>
 </section>
 
