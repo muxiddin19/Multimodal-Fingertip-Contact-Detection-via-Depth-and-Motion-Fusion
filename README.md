@@ -8,7 +8,7 @@
     Suan Lee<sup>3</sup> &middot;
     Geehyuk Lee<sup>1</sup>
     <br />
-    <sup>1</sup>KAIST &nbsp;&nbsp; <sup>2</sup>BMSE, Inha University &nbsp;&nbsp; <sup>3</sup>Semyung University &nbsp;&nbsp; <sup>4</sup>Gachon University, South Korea &nbsp;&nbsp; <sup>5</sup>Jizzakh branch of the National University of Uzbekistan, Uzbekistan
+    <sup>1</sup>SoC, KAIST &nbsp;&nbsp; <sup>2</sup>BMSE, Inha University &nbsp;&nbsp; <sup>3</sup>SoCS, Semyung University &nbsp;&nbsp; <sup>4</sup>DoCE, Gachon University, South Korea &nbsp;&nbsp; <sup>5</sup>Jizzakh branch of the National University of Uzbekistan, Uzbekistan
   </p>
 </p>
 
