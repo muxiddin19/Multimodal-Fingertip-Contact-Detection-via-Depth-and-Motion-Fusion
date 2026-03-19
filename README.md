@@ -180,6 +180,12 @@ The system uses a **velocity-gated hysteresis state machine** that fuses:
 | Cooldown period | 450 ms (~15 frames) |
 | Depth model | DA2-ViTS fine-tuned, max_depth=0.5 |
 
+## Quick Access (QR Codes)
+
+<p align="center">
+  <img src="images/qr_codes_combined.png" width="70%" alt="QR Codes: Project Page | GitHub | HF Models | HF Dataset">
+</p>
+
 ## Citation
 
 ```bibtex
