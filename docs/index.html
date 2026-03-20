@@ -65,7 +65,7 @@
                 <sup>2</sup>VoiceAI, BMSE, Inha University &nbsp;&nbsp;
                 <sup>3</sup>SoCS, Semyung University &nbsp;&nbsp;
                 <sup>4</sup>Dep. of CE, Gachon University, South Korea &nbsp;&nbsp;
-                <sup>5</sup>Jizzakh branch of the National University of Uzbekistan, Uzbekistan
+                <sup>5</sup>Jizzakh branch of the National University of Uzbekistan
             </p>
             <br>
 
@@ -149,7 +149,7 @@
             <div class="column is-10">
                 <div class="highlight-box">
                     <strong>94.2%</strong> contact detection accuracy &nbsp;|&nbsp;
-                    <strong>3.2 mm</strong> depth MAE (4&times; improvement) &nbsp;|&nbsp;
+                    <strong>3.8 mm</strong> depth MAE (68% reduction) &nbsp;|&nbsp;
                     <strong>45.6 WPM</strong> typing speed &nbsp;|&nbsp;
                     <strong>30 FPS</strong> real-time on RTX 3060 Ti
                 </div>
@@ -165,7 +165,7 @@
         <p class="content has-text-justified">
             We present a real-time system for detecting fingertip contact events on flat surfaces using monocular depth estimation and motion analysis.
             Our approach fine-tunes Depth Anything V2 on a custom close-range dataset captured with an Intel RealSense D405 depth camera,
-            reducing mean absolute depth error from 12.8 mm to 3.2 mm in the 25&ndash;45 cm operating range.
+            reducing mean absolute depth error by 68%, from 12.3 mm to 3.84 mm in the 25&ndash;45 cm operating range.
             Contact detection employs a velocity-gated hysteresis state machine that fuses depth-based surface distance
             (4.5 mm entry / 6.0 mm exit thresholds) with fingertip motion velocity cues, achieving 94.2% accuracy and 94.4% F1-score.
             The system operates at 30 FPS on consumer hardware, enabling practical vision-based virtual keyboard interaction
@@ -221,8 +221,8 @@
                         <tr><th>Model</th><th>MAE (mm)</th><th>&delta;1 (%)</th><th>RMSE (mm)</th></tr>
                     </thead>
                     <tbody>
-                        <tr><td>DA2-ViTS (pre-trained)</td><td>12.8</td><td>38.2</td><td>15.4</td></tr>
-                        <tr><td><strong>Ours (fine-tuned)</strong></td><td class="best">3.2</td><td class="best">96.2</td><td class="best">5.1</td></tr>
+                        <tr><td>DA2-ViTS (pre-trained)</td><td>12.3</td><td>87.2</td><td>18.4</td></tr>
+                        <tr><td><strong>Ours (fine-tuned)</strong></td><td class="best">3.8</td><td class="best">95.96</td><td class="best">4.8</td></tr>
                     </tbody>
                 </table>
             </div>

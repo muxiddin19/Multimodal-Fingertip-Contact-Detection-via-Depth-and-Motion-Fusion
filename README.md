@@ -8,7 +8,7 @@
     Suan Lee<sup>3</sup> &middot;
     Geehyuk Lee<sup>1</sup>
     <br />
-    <sup>1</sup>SpaceTop, SoC, KAIST &nbsp;&nbsp; <sup>2</sup>VoiceAI, BMSE, Inha University &nbsp;&nbsp; <sup>3</sup>SoCS, Semyung University &nbsp;&nbsp; <sup>4</sup>Dep. of CE, Gachon University, South Korea &nbsp;&nbsp; <sup>5</sup>Jizzakh branch of the National University of Uzbekistan, Uzbekistan
+    <sup>1</sup>SpaceTop, SoC, KAIST &nbsp;&nbsp; <sup>2</sup>VoiceAI, BMSE, Inha University &nbsp;&nbsp; <sup>3</sup>SoCS, Semyung University &nbsp;&nbsp; <sup>4</sup>Dep. of CE, Gachon University, South Korea &nbsp;&nbsp; <sup>5</sup>Jizzakh branch of the National University of Uzbekistan
   </p>
 </p>
 
@@ -27,7 +27,7 @@
 
 ## About
 
-A vision-based virtual keyboard system that detects fingertip contact events in real-time using monocular depth estimation and motion analysis. Our fine-tuned Depth Anything V2 achieves **3.2mm MAE** at close range, enabling **94.2% contact detection accuracy** and **45.6 WPM** typing at 30 FPS on consumer hardware.
+A vision-based virtual keyboard system that detects fingertip contact events in real-time using monocular depth estimation and motion analysis. Our fine-tuned Depth Anything V2 achieves **3.8mm MAE** (68% reduction) at close range, enabling **94.2% contact detection accuracy** and **45.6 WPM** typing at 30 FPS on consumer hardware.
 
 ## Quick Start
 
@@ -72,7 +72,7 @@ python vr_keyboard_cvpr2026_v7.py
 
 | Metric | Value |
 |--------|-------|
-| Depth MAE | 3.2 mm (down from 12.8 mm pre-trained) |
+| Depth MAE | 3.84 mm (68% reduction from 12.3 mm pre-trained) |
 | Contact Accuracy | 94.2% |
 | F1-Score | 94.4% |
 | Typing Speed | 45.6 WPM |
