@@ -59,6 +59,16 @@ wget -P checkpoints/ https://huggingface.co/depth-anything/Depth-Anything-V2-Sma
 ```bash
 python keyboard.py
 ```
+#### With two fingertips
+
+```bash
+python keyboard.py --debug
+```
+#### All fingertips
+```bash
+python keyboard.py --all-fingers
+```
+
 
 **Controls:**
 | Key | Action |
