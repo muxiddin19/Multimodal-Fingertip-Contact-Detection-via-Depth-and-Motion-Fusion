@@ -12,7 +12,7 @@ CAMERA_WIDTH, CAMERA_HEIGHT, _, _, CAMERA_FPS = camera_manager.get_resolution()
 annotations = []
 current_raw_frame = None
 window_name = 'Keyboard Annotation Tool'
-output_filename = 'assets/keyboard_annotations.json'
+output_filename = 'assets/keyboard_annotations1.json'
 
 # Variables to manage the 4-point annotation process
 temp_key_points = []

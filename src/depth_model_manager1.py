@@ -84,9 +84,9 @@ class DepthEstimator:
         print(f"\n[MODEL LOADING]")
         print(f"  Architecture: {self.encoder.upper()}")
         model_configs = {
-            'vits': {'encoder': 'vits', 'features': 64, 'out_channels': [48, 96, 192, 384], 'max_depth': 0.4}, #20.0
-            'vitb': {'encoder': 'vitb', 'features': 128, 'out_channels': [96, 192, 384, 768], 'max_depth': 0.4}, #20.0
-            'vitl': {'encoder': 'vitl', 'features': 256, 'out_channels': [256, 512, 1024, 1024], 'max_depth': 0.4}, #20.0
+            'vits': {'encoder': 'vits', 'features': 64, 'out_channels': [48, 96, 192, 384], 'max_depth': 0.58}, #20.0
+            'vitb': {'encoder': 'vitb', 'features': 128, 'out_channels': [96, 192, 384, 768], 'max_depth': 0.58}, #20.0
+            'vitl': {'encoder': 'vitl', 'features': 256, 'out_channels': [256, 512, 1024, 1024], 'max_depth': 0.58}, #20.0
         }
         
         config = model_configs.get(self.encoder, model_configs['vits']) 
@@ -180,41 +180,48 @@ class DepthEstimator:
         else:
             image_rgb = image
         
+        # with torch.no_grad():
+        #     h_orig, w_orig = image_rgb.shape[:2]
+            
+        #     # Resize to model input size (518x518, divisible by 14)
+        #     target_size = 518
+        #     h_new = (target_size // 14) * 14
+        #     w_new = (target_size // 14) * 14
+            
+        #     image_resized = cv2.resize(image_rgb, (w_new, h_new), 
+        #                               interpolation=cv2.INTER_LINEAR)
         with torch.no_grad():
             h_orig, w_orig = image_rgb.shape[:2]
+            depth_map = self.model.infer_image(image_rgb, input_size=518)
+            if isinstance(depth_map, torch.Tensor):
+                depth_map = depth_map.cpu().numpy()
+            if depth_map.shape[0] != h_orig or depth_map.shape[1] != w_orig:
+                depth_map = cv2.resize(depth_map, (w_orig, h_orig),
+                                       interpolation=cv2.INTER_LINEAR)
+            # # Prepare tensor and normalize
+            # image_tensor = torch.from_numpy(image_resized).float()
+            # image_tensor = image_tensor.permute(2, 0, 1).unsqueeze(0)
+            # image_tensor = image_tensor.to(self.device) / 255.0
             
-            # Resize to model input size (518x518, divisible by 14)
-            target_size = 518
-            h_new = (target_size // 14) * 14
-            w_new = (target_size // 14) * 14
+            # # ImageNet normalization
+            # mean = torch.tensor([0.485, 0.456, 0.406]).view(1, 3, 1, 1).to(self.device)
+            # std = torch.tensor([0.229, 0.224, 0.225]).view(1, 3, 1, 1).to(self.device)
+            # image_tensor = (image_tensor - mean) / std
             
-            image_resized = cv2.resize(image_rgb, (w_new, h_new), 
-                                      interpolation=cv2.INTER_LINEAR)
+            # # Forward pass
+            # depth_pred = self.model(image_tensor)
             
-            # Prepare tensor and normalize
-            image_tensor = torch.from_numpy(image_resized).float()
-            image_tensor = image_tensor.permute(2, 0, 1).unsqueeze(0)
-            image_tensor = image_tensor.to(self.device) / 255.0
+            # # Resize back to original dimensions
+            # depth_map = F.interpolate(
+            #     depth_pred[:, None] if depth_pred.dim() == 3 else depth_pred,
+            #     size=(h_orig, w_orig),
+            #     mode='bilinear',
+            #     align_corners=True
+            # )
             
-            # ImageNet normalization
-            mean = torch.tensor([0.485, 0.456, 0.406]).view(1, 3, 1, 1).to(self.device)
-            std = torch.tensor([0.229, 0.224, 0.225]).view(1, 3, 1, 1).to(self.device)
-            image_tensor = (image_tensor - mean) / std
-            
-            # Forward pass
-            depth_pred = self.model(image_tensor)
-            
-            # Resize back to original dimensions
-            depth_map = F.interpolate(
-                depth_pred[:, None] if depth_pred.dim() == 3 else depth_pred,
-                size=(h_orig, w_orig),
-                mode='bilinear',
-                align_corners=True
-            )
-            
-            if depth_map.dim() == 4:
-                depth_map = depth_map[0, 0]
-            depth_map = depth_map.cpu().numpy()
+            # if depth_map.dim() == 4:
+            #     depth_map = depth_map[0, 0]
+            # depth_map = depth_map.cpu().numpy()
         
         # Apply calibration if available
         if self.is_calibrated:
