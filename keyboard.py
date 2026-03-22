@@ -184,7 +184,7 @@ class VelocityBasedContactDetector:
         min_peak_velocity: float = 15.0,
         velocity_threshold_retract: float = -8.0,
         required_contact_frames: int = 1,
-        cooldown_frames: int =8,  # ← Increase from 15
+        cooldown_frames: int =4, #8  # ← Increase from 15
         confidence_threshold: float = 0.40  # ← Increase from 0.55
     ):
         self.history_size = history_size
@@ -334,7 +334,7 @@ class VelocityBasedContactDetector:
         # APPROACHING: Moving down fast with sustained velocity
         is_approaching = (
             vy_curr > self.velocity_threshold_approach and
-            vy_curr >= vy_prev * 0.85
+            vy_curr >= vy_prev * 0.6 # 0.85
         )
 
         # STOPPING: Velocity drops significantly (indicates contact)
@@ -710,7 +710,7 @@ class VRKeyboardCVPR2026:
             contact_entry_threshold_cm=0.45,# 4.5mm
             contact_exit_threshold_cm=.6, # 6.0mm
             required_contact_frames=1,
-            cooldown_frames=8             # ~240ms @ 30fps
+            cooldown_frames=4 #8             # ~240ms @ 30fps
         )
 
         # Initialize MediaPipe hands
