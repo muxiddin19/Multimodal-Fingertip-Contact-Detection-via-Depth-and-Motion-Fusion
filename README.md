@@ -57,7 +57,7 @@ wget -P checkpoints/ https://huggingface.co/depth-anything/Depth-Anything-V2-Sma
 ### Run the VR Keyboard
 
 ```bash
-python vr_keyboard_cvpr2026_v7.py
+python keyboard.py
 ```
 
 **Controls:**
@@ -83,7 +83,7 @@ python vr_keyboard_cvpr2026_v7.py
 
 ```
 .
-├── vr_keyboard_cvpr2026_v7.py       # Main VR keyboard application
+├── keyboard.py       # Main VR keyboard application
 ├── src/                              # Core modules
 │   ├── depth_model_manager.py        #   Depth Anything V2 inference (max_depth=0.5)
 │   ├── depth_tracker.py              #   Velocity-gated hysteresis contact detector
