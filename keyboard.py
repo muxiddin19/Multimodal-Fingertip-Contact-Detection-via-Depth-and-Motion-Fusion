@@ -551,10 +551,12 @@ class VRKeyboardCVPR2026:
         use_real_keyboard: bool = True,
         track_all_fingers: bool = False,
         debug_mode: bool = False,
-        diagnose_mode: bool = False
+        diagnose_mode: bool = False,
+        target_phrase: str = None
     ):
         self.diagnose_mode = diagnose_mode
         self._diagnose_log = []
+        self.target_phrase = target_phrase
         print("=" * 70)
         print("  VR KEYBOARD - CVPR 2026 IMPLEMENTATION (V1)")
         print("  Real-Time Multimodal Fingertip Contact Detection")
@@ -582,7 +584,7 @@ class VRKeyboardCVPR2026:
             contact_entry_threshold_cm=0.45,  # 4.5mm
             contact_exit_threshold_cm=0.6,    # 6.0mm
             required_contact_frames=1,
-            cooldown_frames=4,
+            cooldown_frames=8,
             confidence_threshold=0.50  # Reject depth-only fallback (0.45), require velocity (0.60)
         )
 
@@ -961,18 +963,26 @@ class VRKeyboardCVPR2026:
             self.keyboard_surface_depth, timestamp, debug=self.debug_mode
         )
         if is_contact:
-            # Finger pad offset: contact happens at pad (~12px below tip)
+            # Finger pad offset: contact happens at pad (small offset below tip)
             contact_x = x
-            contact_y = y + 12
+            contact_y = y + 6
 
             best_key = None
             best_distance = float('inf')
+
+            # Edge/dangerous keys need stricter distance to avoid accidental presses
+            STRICT_KEYS = {'backspace', 'Backspace', 'B.Spa', 'B.spa',
+                           'delete', 'Delete', 'del',
+                           'enter', 'Enter', 'return',
+                           'esc', 'Esc', 'tab', 'Tab',
+                           'alt', 'Alt', 'ctrl', 'Ctrl', 'win', 'Win'}
 
             for key in self.keys:
                 center_x, center_y = key['center']
                 distance = np.sqrt((contact_x - center_x)**2 + (contact_y - center_y)**2)
 
-                if distance < 35 and distance < best_distance:
+                max_dist = 10 if key['name'] in STRICT_KEYS else 35
+                if distance < max_dist and distance < best_distance:
                     best_distance = distance
                     best_key = key
 
@@ -1039,6 +1049,11 @@ class VRKeyboardCVPR2026:
         cv2.arrowedLine(frame, (230, legend_y + 15), (230, legend_y), (255, 100, 100), 2, tipLength=0.3)
         cv2.putText(frame, "Retracting", (240, legend_y + 10), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (255, 255, 255), 1)
 
+        # Show target phrase if provided
+        if self.target_phrase:
+            cv2.putText(frame, f"Target: {self.target_phrase}", (10, h - 50),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.4, (150, 150, 255), 1)
+
         cv2.putText(frame, "Typed:", (10, h - 35), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (200, 200, 200), 1)
         display_text = self.typed_text[-50:] if len(self.typed_text) > 50 else self.typed_text
         cv2.putText(frame, display_text, (10, h - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
@@ -1047,14 +1062,46 @@ class VRKeyboardCVPR2026:
             wpm = self.typing_metrics.wpm
             cv2.putText(frame, f"WPM: {wpm:.1f}", (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 255, 0), 1)
 
+    @staticmethod
+    def _edit_distance(s1: str, s2: str) -> int:
+        """Compute Levenshtein edit distance between two strings."""
+        m, n = len(s1), len(s2)
+        dp = list(range(n + 1))
+        for i in range(1, m + 1):
+            prev = dp[0]
+            dp[0] = i
+            for j in range(1, n + 1):
+                temp = dp[j]
+                if s1[i - 1] == s2[j - 1]:
+                    dp[j] = prev
+                else:
+                    dp[j] = 1 + min(prev, dp[j], dp[j - 1])
+                prev = temp
+        return dp[n]
+
     def print_metrics(self):
         """Print current performance metrics."""
         print("\n" + "=" * 70)
         print("  PERFORMANCE METRICS")
         print("=" * 70)
-        print(f"  Typing Metrics:")
-        print(f"    - WPM: {self.typing_metrics.wpm:.1f}")
-        print(f"    - CER: {self.typing_metrics.cer * 100:.1f}%")
+
+        # Compute CER from target phrase if available
+        if self.target_phrase:
+            typed_clean = self.typed_text.strip()
+            edit_dist = self._edit_distance(typed_clean, self.target_phrase)
+            cer = edit_dist / max(len(self.target_phrase), 1) * 100
+            print(f"  Target phrase: \"{self.target_phrase}\"")
+            print(f"  Typed text:    \"{typed_clean}\"")
+            print(f"  Typing Metrics:")
+            print(f"    - WPM: {self.typing_metrics.wpm:.1f}")
+            print(f"    - CER: {cer:.1f}% (edit distance: {edit_dist})")
+        else:
+            cer = 0.0
+            print(f"  Typed text: \"{self.typed_text.strip()}\"")
+            print(f"  Typing Metrics:")
+            print(f"    - WPM: {self.typing_metrics.wpm:.1f}")
+            print(f"    - CER: N/A (no --target specified)")
+
         print(f"    - Total characters: {self.typing_metrics.total_characters}")
         print(f"    - Total words: {self.typing_metrics.total_characters / 5.0:.1f}")
         print(f"\n  Contact Detection Metrics:")
@@ -1294,6 +1341,8 @@ def main():
     parser.add_argument('--checkpoint', type=str, default=None, help='Path to custom depth model checkpoint')
     parser.add_argument('--diagnose', action='store_true',
                         help='Diagnostic mode: print fingertip depth every frame (uses fine-tuned model)')
+    parser.add_argument('--target', type=str, default=None,
+                        help='Target phrase for CER calculation (e.g. "hello cvpr 2026")')
 
     args = parser.parse_args()
 
@@ -1309,7 +1358,8 @@ def main():
             track_all_fingers=args.all_fingers,
             debug_mode=args.debug,
             use_real_keyboard=not args.no_keyboard,
-            diagnose_mode=args.diagnose
+            diagnose_mode=args.diagnose,
+            target_phrase=args.target
         )
         keyboard.run()
     except KeyboardInterrupt:
