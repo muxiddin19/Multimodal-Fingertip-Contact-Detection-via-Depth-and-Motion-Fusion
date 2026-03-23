@@ -51,6 +51,9 @@ from src.one_euro_filter import OneEuroFilter
 from src.gaussian_touch_model import GaussianTouchModel
 from src.language_model import CharLanguageModel
 
+# Import Multi-Finger Filter
+from src.multi_finger_filter import MultiFingerFilter
+
 # Import TapClassifier and AutoCorrect
 try:
     from src.tap_classifier import TapClassifier, AutoCorrect
@@ -601,7 +604,7 @@ class VRKeyboardCVPR2026:
             contact_entry_threshold_cm=0.45,  # 4.5mm
             contact_exit_threshold_cm=0.6,    # 6.0mm
             required_contact_frames=1,
-            cooldown_frames=8,
+            cooldown_frames=5,
             confidence_threshold=0.50  # Reject depth-only fallback (0.45), require velocity (0.60)
         )
 
@@ -699,10 +702,21 @@ class VRKeyboardCVPR2026:
                 self.mp_hands.HandLandmark.PINKY_TIP,
             ]
         else:
-            # Index finger only — most reliable for velocity-based detection
+            # Index fingers only (both hands) — proven reliable configuration
+            # Middle finger disabled: MediaPipe can't distinguish intentional
+            # taps from sympathetic motion without a neural decoder
             self.fingertip_landmarks = [
                 self.mp_hands.HandLandmark.INDEX_FINGER_TIP,
             ]
+
+        # Multi-finger tap filter (per-finger thresholds + curl ratio + temporal dedup)
+        self.finger_filter = MultiFingerFilter(
+            temporal_window_ms=100.0,
+            curl_ratio_threshold=0.12,
+            base_velocity_threshold=8.0,
+            base_min_peak_velocity=15.0,
+        )
+        print(f"[LOADED] Multi-finger filter (per-finger thresholds + curl ratio)")
 
         # Performance tracking
         self.fps = 0
@@ -774,7 +788,7 @@ class VRKeyboardCVPR2026:
 
     def _print_config(self):
         """Print configuration summary."""
-        finger_desc = 'All fingers' if self.track_all_fingers else 'Index finger only'
+        finger_desc = 'All fingers' if self.track_all_fingers else 'Index fingers (both hands)'
         print("\n" + "=" * 70)
         print("  CONFIGURATION (CVPR 2026 Paper Settings)")
         print("=" * 70)
@@ -1031,8 +1045,23 @@ class VRKeyboardCVPR2026:
             self.keyboard_surface_depth, timestamp, debug=self.debug_mode
         )
 
-        # ML-based tap filtering: use TapClassifier to reject false positives
-        # Uses low threshold (0.15) since the model has limited training data
+        # Multi-finger filter: per-finger thresholds + curl ratio check
+        if is_contact and self.finger_filter:
+            # Parse hand_idx and fingertip_id from finger_id ("h0_f8")
+            parts = finger_id.split('_')
+            hand_idx = int(parts[0][1:])
+            fingertip_id = int(parts[1][1:])
+            peak_vel = debug_info.get('peak_velocity', 0)
+
+            accept, reason = self.finger_filter.should_accept(
+                hand_idx, fingertip_id, peak_vel, timestamp, debug=self.debug_mode
+            )
+            if not accept:
+                if self.debug_mode:
+                    print(f"  [FINGER FILTER] Rejected: {reason}")
+                is_contact = False
+
+        # ML-based tap filtering (disabled until more training data)
         if is_contact and self.tap_classifier:
             depth_mm = debug_info.get('depth_cm', 0) * 10
             velocity = abs(debug_info.get('velocity_y', 0))
@@ -1307,6 +1336,10 @@ class VRKeyboardCVPR2026:
                                 color=(255, 255, 255), thickness=2)
                         )
 
+                        # Update curl ratios for all tracked fingers (every frame)
+                        for fid in self.fingertip_landmarks:
+                            self.finger_filter.update_curl(hand_idx, fid, hand_landmarks, frame.shape[:2])
+
                         for fingertip_id in self.fingertip_landmarks:
                             x, y, depth_corrected, _ = self._get_fingertip_depth(
                                 depth_map, hand_landmarks, fingertip_id, frame.shape[:2])
@@ -1383,17 +1416,18 @@ class VRKeyboardCVPR2026:
                             # Handle keypress
                             if self.is_calibrated and pressed_key:
                                 # Cross-hand duplicate suppression:
-                                # If another hand just pressed nearby (<40px, <0.5s), skip
+                                # Suppress duplicate: if a DIFFERENT finger just pressed
+                                # the same area (<40px, <0.3s), skip it
                                 suppress = False
-                                if self._last_keypress_pos is not None:
+                                if self._last_keypress_pos is not None and finger_id != self._last_keypress_finger:
                                     dx = x - self._last_keypress_pos[0]
                                     dy = y - self._last_keypress_pos[1]
                                     dist = np.sqrt(dx*dx + dy*dy)
                                     dt = start_time - self._last_keypress_time
-                                    if dist < 40 and dt < 0.5 and finger_id[:2] != self._last_keypress_finger[:2]:
+                                    if dist < 40 and dt < 0.3:
                                         suppress = True
                                         if self.debug_mode:
-                                            print(f"  [SUPPRESSED] Cross-hand duplicate near {pressed_key}")
+                                            print(f"  [SUPPRESSED] Multi-finger duplicate near {pressed_key}")
 
                                 if not suppress and pressed_key != self.last_keys_pressed.get(finger_id):
                                     self._handle_key_press(pressed_key)
