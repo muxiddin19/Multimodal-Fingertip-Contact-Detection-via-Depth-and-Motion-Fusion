@@ -54,6 +54,9 @@ from src.language_model import CharLanguageModel
 # Import Multi-Finger Filter
 from src.multi_finger_filter import MultiFingerFilter
 
+# Import Word Predictor
+from src.word_predictor import WordPredictor
+
 # Import TapClassifier and AutoCorrect
 try:
     from src.tap_classifier import TapClassifier, AutoCorrect
@@ -623,6 +626,14 @@ class VRKeyboardCVPR2026:
             ])
             print("[LOADED] AutoCorrect (QWERTY-weighted edit distance)")
 
+        # Initialize Word Predictor
+        self.word_predictor = WordPredictor(extra_words=[
+            'cvpr', 'kaist', 'spacetop', 'mediapipe', 'vr', 'ar', 'xr',
+            'hello', 'keyboard', 'typing', 'depth', 'wpm',
+        ])
+        self._predictions: list = []  # Current top-3 predictions
+        print("[LOADED] Word Predictor (prefix + bigram context)")
+
         # Initialize MediaPipe hands
         print("[LOADING] Hand tracking (MediaPipe)...")
         self.mp_hands = mp.solutions.hands
@@ -806,9 +817,11 @@ class VRKeyboardCVPR2026:
         print(f"  Language Model: {'Enabled (alpha=' + f'{self.lm_alpha:.1f})' if self.language_model else 'Disabled'}")
         print(f"  TapClassifier: {'Enabled' if self.tap_classifier else 'Disabled'}")
         print(f"  AutoCorrect: {'Enabled' if self.autocorrect else 'Disabled'}")
+        print(f"  Word Prediction: Enabled (press 1/2/3 to accept)")
         print("=" * 70)
         print("\n[CALIBRATION] Press 'A' for auto-calibration OR 'C' after clicking surface")
         print("[CONTROLS] A=Auto-Cal | C=Manual-Cal | D=Debug | M=Metrics | Q=Quit")
+        print("[PREDICT]  1/2/3 = Accept word prediction")
         print("=" * 70 + "\n")
 
     def _load_keyboard_annotation(self, filename: str) -> List[Dict]:
@@ -1216,6 +1229,74 @@ class VRKeyboardCVPR2026:
             wpm = self.typing_metrics.wpm
             cv2.putText(frame, f"WPM: {wpm:.1f}", (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 255, 0), 1)
 
+        # Show word predictions
+        self._update_predictions()
+        if self._predictions:
+            pred_y = 50 if not self.debug_mode else 80
+            cv2.putText(frame, "Predictions (1/2/3):", (10, pred_y),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.35, (200, 200, 200), 1)
+            for i, (word, score) in enumerate(self._predictions[:3]):
+                label = f"[{i+1}] {word}"
+                px = 10 + i * 150
+                py = pred_y + 20
+                # Draw prediction box
+                text_size = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)[0]
+                cv2.rectangle(frame, (px - 4, py - 16), (px + text_size[0] + 4, py + 4),
+                             (60, 60, 120), -1)
+                cv2.rectangle(frame, (px - 4, py - 16), (px + text_size[0] + 4, py + 4),
+                             (100, 100, 200), 1)
+                cv2.putText(frame, label, (px, py),
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 100), 1)
+
+    def _update_predictions(self):
+        """Update word predictions based on current typed text."""
+        if not self.word_predictor:
+            self._predictions = []
+            return
+
+        # Get the current partial word (text after last space)
+        words = self.typed_text.split(' ')
+        current_word = words[-1] if words else ''
+        prev_word = words[-2] if len(words) >= 2 else None
+
+        if len(current_word) >= 2:
+            self._predictions = self.word_predictor.predict(
+                current_word, prev_word=prev_word, max_results=3
+            )
+        else:
+            self._predictions = []
+
+    def _accept_prediction(self, index: int):
+        """Accept a word prediction by index (0-2)."""
+        if index >= len(self._predictions):
+            return
+
+        predicted_word, _ = self._predictions[index]
+
+        # Get current partial word
+        words = self.typed_text.split(' ')
+        current_partial = words[-1] if words else ''
+
+        if not current_partial:
+            return
+
+        # Calculate characters to complete
+        completion = predicted_word[len(current_partial):]
+        if not completion:
+            return
+
+        # Apply completion
+        self.typed_text += completion
+        chars_saved = len(completion)
+        self.typing_metrics.total_characters += chars_saved
+
+        # Simulate the completion on real keyboard
+        if self.use_real_keyboard and self.keyboard_controller:
+            self.keyboard_controller.type(completion)
+
+        print(f"[PREDICTION] '{current_partial}' -> '{predicted_word}' (saved {chars_saved} chars)")
+        self._predictions = []
+
     @staticmethod
     def _edit_distance(s1: str, s2: str) -> int:
         """Compute Levenshtein edit distance between two strings."""
@@ -1487,6 +1568,13 @@ class VRKeyboardCVPR2026:
                     print(f"[DEBUG] {'ON' if self.debug_mode else 'OFF'}")
                 elif key == ord('m'):
                     self.print_metrics()
+                # Word prediction: accept with keyboard 1/2/3
+                elif key == ord('1') and self._predictions:
+                    self._accept_prediction(0)
+                elif key == ord('2') and self._predictions:
+                    self._accept_prediction(1)
+                elif key == ord('3') and self._predictions:
+                    self._accept_prediction(2)
 
         finally:
             print("\n[SHUTDOWN]")
