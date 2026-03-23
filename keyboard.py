@@ -47,6 +47,10 @@ torch.serialization.add_safe_globals([np.core.multiarray._reconstruct])
 # Import One Euro Filter for depth smoothing
 from src.one_euro_filter import OneEuroFilter
 
+# Import Gaussian Touch Model and Language Model
+from src.gaussian_touch_model import GaussianTouchModel
+from src.language_model import CharLanguageModel
+
 # Import TapClassifier and AutoCorrect
 try:
     from src.tap_classifier import TapClassifier, AutoCorrect
@@ -561,7 +565,11 @@ class VRKeyboardCVPR2026:
         debug_mode: bool = False,
         diagnose_mode: bool = False,
         target_phrase: str = None,
-        use_autocorrect: bool = False
+        use_autocorrect: bool = False,
+        sigma_x: float = 20.0,
+        sigma_y: float = 15.0,
+        lm_weight: float = 0.7,
+        use_lm: bool = True
     ):
         self.diagnose_mode = diagnose_mode
         self._diagnose_log = []
@@ -628,6 +636,14 @@ class VRKeyboardCVPR2026:
         print("[LOADING] Keyboard layout...")
         self.keys = self._load_keyboard_annotation(annotation_file)
 
+        # Initialize Gaussian Touch Model + Language Model
+        self.touch_model = GaussianTouchModel(self.keys, sigma_x=sigma_x, sigma_y=sigma_y)
+        self.language_model = CharLanguageModel() if use_lm else None
+        self.lm_alpha = lm_weight  # touch_weight; (1-alpha) = language_weight
+        print(f"[LOADED] Gaussian Touch Model (sigma={sigma_x:.0f}x{sigma_y:.0f})")
+        if self.language_model:
+            print(f"[LOADED] Character LM (alpha={lm_weight:.1f})")
+
         # Initialize camera
         print("[LOADING] Camera...")
         self.cap = cv2.VideoCapture(camera_id)
@@ -661,6 +677,11 @@ class VRKeyboardCVPR2026:
         self.last_keys_pressed = {}
         self.shift_active = False
         self.caps_lock = False
+
+        # Cross-hand duplicate suppression
+        self._last_keypress_pos = None     # (x, y) of last accepted keypress
+        self._last_keypress_time = 0.0     # timestamp of last accepted keypress
+        self._last_keypress_finger = ""    # finger_id of last keypress
 
         # Depth frame skip for performance
         self.depth_frame_skip = 2
@@ -767,6 +788,8 @@ class VRKeyboardCVPR2026:
         print(f"  Confidence threshold: {self.contact_detector.confidence_threshold}")
         print(f"  Tracking: {finger_desc}")
         print(f"  Depth smoothing: One Euro Filter")
+        print(f"  Key selection: Gaussian Touch Model (sigma={self.touch_model.sigma_x:.0f}x{self.touch_model.sigma_y:.0f})")
+        print(f"  Language Model: {'Enabled (alpha=' + f'{self.lm_alpha:.1f})' if self.language_model else 'Disabled'}")
         print(f"  TapClassifier: {'Enabled' if self.tap_classifier else 'Disabled'}")
         print(f"  AutoCorrect: {'Enabled' if self.autocorrect else 'Disabled'}")
         print("=" * 70)
@@ -1025,28 +1048,72 @@ class VRKeyboardCVPR2026:
             contact_x = x
             contact_y = y + 6
 
-            best_key = None
-            best_distance = float('inf')
-
-            # Edge/dangerous keys need stricter distance to avoid accidental presses
+            # Edge/dangerous keys need higher touch probability
             STRICT_KEYS = {'backspace', 'Backspace', 'B.Spa', 'B.spa',
                            'delete', 'Delete', 'del',
                            'enter', 'Enter', 'return',
                            'esc', 'Esc', 'tab', 'Tab',
                            'alt', 'Alt', 'ctrl', 'Ctrl', 'win', 'Win'}
 
-            for key in self.keys:
-                center_x, center_y = key['center']
-                distance = np.sqrt((contact_x - center_x)**2 + (contact_y - center_y)**2)
+            # Stage 1: Gaussian touch probabilities
+            touch_probs = self.touch_model.compute_key_probabilities(contact_x, contact_y)
 
-                max_dist = 10 if key['name'] in STRICT_KEYS else 35
-                if distance < max_dist and distance < best_distance:
-                    best_distance = distance
+            # Get the top candidate by raw touch probability
+            top_key_name = max(touch_probs, key=touch_probs.get)
+            top_touch_p = touch_probs[top_key_name]
+
+            # If top candidate is a strict key that we'd block, return nothing
+            # (prevents fallthrough to wrong nearby keys like 'm')
+            if top_key_name in STRICT_KEYS:
+                center = next(k['center'] for k in self.keys if k['name'] == top_key_name)
+                dist = np.sqrt((contact_x - center[0])**2 + (contact_y - center[1])**2)
+                if dist > 10 or top_touch_p < 0.95:
+                    # Top candidate is blocked strict key — reject entirely
+                    return (None, confidence, debug_info)
+
+            # Minimum probability floor — reject if no strong candidate
+            if top_touch_p < 0.5:
+                return (None, confidence, debug_info)
+
+            # Stage 2: Language model rescoring (only among non-strict keys + allowed strict)
+            if self.language_model:
+                context = self.typed_text[-3:]
+                combined_scores = self.language_model.score_candidates(
+                    touch_probs, context, alpha=self.lm_alpha
+                )
+            else:
+                import math
+                combined_scores = {k: math.log(p + 1e-10) for k, p in touch_probs.items()}
+
+            # Select best key
+            best_key = None
+            best_score = -float('inf')
+
+            for key in self.keys:
+                key_name = key['name']
+                score = combined_scores.get(key_name, -100.0)
+
+                # Strict keys: require BOTH high probability AND close distance
+                if key_name in STRICT_KEYS:
+                    cx, cy = key['center']
+                    dist = np.sqrt((contact_x - cx)**2 + (contact_y - cy)**2)
+                    if dist > 10 or touch_probs.get(key_name, 0) < 0.95:
+                        continue
+
+                # Minimum touch probability for any key
+                if touch_probs.get(key_name, 0) < 0.01:
+                    continue
+
+                if score > best_score:
+                    best_score = score
                     best_key = key
 
             if best_key:
+                touch_p = touch_probs.get(best_key['name'], 0)
                 if self.debug_mode:
-                    print(f"[KEY SELECTED] {best_key['name']} (dist: {best_distance:.1f}px)")
+                    top3 = self.touch_model.get_top_k(contact_x, contact_y, k=3)
+                    top3_str = ', '.join(f"{k}:{p:.2f}" for k, p in top3)
+                    print(f"[KEY SELECTED] {best_key['name']} (touch_p={touch_p:.2f}, top3=[{top3_str}])")
                 return (best_key['name'], confidence, debug_info)
 
         return (None, confidence, debug_info)
@@ -1315,11 +1382,27 @@ class VRKeyboardCVPR2026:
 
                             # Handle keypress
                             if self.is_calibrated and pressed_key:
-                                if pressed_key != self.last_keys_pressed.get(finger_id):
+                                # Cross-hand duplicate suppression:
+                                # If another hand just pressed nearby (<40px, <0.5s), skip
+                                suppress = False
+                                if self._last_keypress_pos is not None:
+                                    dx = x - self._last_keypress_pos[0]
+                                    dy = y - self._last_keypress_pos[1]
+                                    dist = np.sqrt(dx*dx + dy*dy)
+                                    dt = start_time - self._last_keypress_time
+                                    if dist < 40 and dt < 0.5 and finger_id[:2] != self._last_keypress_finger[:2]:
+                                        suppress = True
+                                        if self.debug_mode:
+                                            print(f"  [SUPPRESSED] Cross-hand duplicate near {pressed_key}")
+
+                                if not suppress and pressed_key != self.last_keys_pressed.get(finger_id):
                                     self._handle_key_press(pressed_key)
                                     self.last_keys_pressed[finger_id] = pressed_key
                                     self.last_pressed_key_visual = pressed_key
                                     self.last_pressed_key_frames = 10
+                                    self._last_keypress_pos = (x, y)
+                                    self._last_keypress_time = start_time
+                                    self._last_keypress_finger = finger_id
                             elif not pressed_key:
                                 self.last_keys_pressed[finger_id] = None
 
@@ -1403,6 +1486,10 @@ def main():
                         help='Target phrase for CER calculation (e.g. "hello cvpr 2026")')
     parser.add_argument('--autocorrect', action='store_true',
                         help='Enable autocorrect on SPACE press')
+    parser.add_argument('--sigma-x', type=float, default=20.0, help='Gaussian touch sigma X (pixels)')
+    parser.add_argument('--sigma-y', type=float, default=15.0, help='Gaussian touch sigma Y (pixels)')
+    parser.add_argument('--lm-weight', type=float, default=0.7, help='Touch model weight vs LM (0-1)')
+    parser.add_argument('--no-lm', action='store_true', help='Disable language model')
 
     args = parser.parse_args()
 
@@ -1420,7 +1507,11 @@ def main():
             use_real_keyboard=not args.no_keyboard,
             diagnose_mode=args.diagnose,
             target_phrase=args.target,
-            use_autocorrect=args.autocorrect
+            use_autocorrect=args.autocorrect,
+            sigma_x=args.sigma_x,
+            sigma_y=args.sigma_y,
+            lm_weight=args.lm_weight,
+            use_lm=not args.no_lm
         )
         keyboard.run()
     except KeyboardInterrupt:
