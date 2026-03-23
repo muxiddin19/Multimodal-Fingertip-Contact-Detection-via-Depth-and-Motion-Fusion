@@ -47,6 +47,14 @@ torch.serialization.add_safe_globals([np.core.multiarray._reconstruct])
 # Import One Euro Filter for depth smoothing
 from src.one_euro_filter import OneEuroFilter
 
+# Import TapClassifier and AutoCorrect
+try:
+    from src.tap_classifier import TapClassifier, AutoCorrect
+    TAP_CLASSIFIER_AVAILABLE = True
+except ImportError:
+    print("WARNING: TapClassifier/AutoCorrect not available.")
+    TAP_CLASSIFIER_AVAILABLE = False
+
 try:
     from src.depth_model_manager1 import DepthEstimator
     DEPTH_MODEL_AVAILABLE = True
@@ -552,7 +560,8 @@ class VRKeyboardCVPR2026:
         track_all_fingers: bool = False,
         debug_mode: bool = False,
         diagnose_mode: bool = False,
-        target_phrase: str = None
+        target_phrase: str = None,
+        use_autocorrect: bool = False
     ):
         self.diagnose_mode = diagnose_mode
         self._diagnose_log = []
@@ -587,6 +596,21 @@ class VRKeyboardCVPR2026:
             cooldown_frames=8,
             confidence_threshold=0.50  # Reject depth-only fallback (0.45), require velocity (0.60)
         )
+
+        # TapClassifier disabled — needs more training data (>100 positive samples)
+        # to be effective. With current data (15 positives / 408 total), it over-rejects.
+        # To enable: collect more sessions, retrain, then set self.tap_classifier here.
+        self.tap_classifier = None
+
+        # Initialize AutoCorrect (opt-in via --autocorrect flag)
+        self.autocorrect = None
+        if use_autocorrect and TAP_CLASSIFIER_AVAILABLE:
+            self.autocorrect = AutoCorrect(extra_words=[
+                'cvpr', 'wpm', 'cer', 'kaist', 'spacetop', 'mediapipe',
+                'vr', 'ar', 'xr', 'hci', 'dav2', 'vits', 'vitb', 'vitl',
+                'hello', 'world', 'keyboard', 'typing', 'depth',
+            ])
+            print("[LOADED] AutoCorrect (QWERTY-weighted edit distance)")
 
         # Initialize MediaPipe hands
         print("[LOADING] Hand tracking (MediaPipe)...")
@@ -743,6 +767,8 @@ class VRKeyboardCVPR2026:
         print(f"  Confidence threshold: {self.contact_detector.confidence_threshold}")
         print(f"  Tracking: {finger_desc}")
         print(f"  Depth smoothing: One Euro Filter")
+        print(f"  TapClassifier: {'Enabled' if self.tap_classifier else 'Disabled'}")
+        print(f"  AutoCorrect: {'Enabled' if self.autocorrect else 'Disabled'}")
         print("=" * 70)
         print("\n[CALIBRATION] Press 'A' for auto-calibration OR 'C' after clicking surface")
         print("[CONTROLS] A=Auto-Cal | C=Manual-Cal | D=Debug | M=Metrics | Q=Quit")
@@ -896,6 +922,25 @@ class VRKeyboardCVPR2026:
             return True
 
         elif normalized == 'SPACE':
+            # AutoCorrect the last word before adding space
+            if self.autocorrect and self.typed_text:
+                words = self.typed_text.split(' ')
+                last_word = words[-1] if words else ''
+                if last_word and last_word.isalpha():
+                    corrected = self.autocorrect.correct_word(last_word)
+                    if corrected.lower() != last_word.lower():
+                        # Replace the last word with corrected version
+                        words[-1] = corrected
+                        old_text = self.typed_text
+                        self.typed_text = ' '.join(words)
+                        # Simulate backspaces + retype for real keyboard
+                        if self.use_real_keyboard and self.keyboard_controller:
+                            for _ in range(len(last_word)):
+                                self.keyboard_controller.press(Key.backspace)
+                                self.keyboard_controller.release(Key.backspace)
+                            self.keyboard_controller.type(corrected)
+                        print(f"[AUTOCORRECT] '{last_word}' -> '{corrected}'")
+
             self.typed_text += ' '
             self.typing_metrics.total_words += 1
             self._simulate_keypress(key_name)
@@ -962,6 +1007,19 @@ class VRKeyboardCVPR2026:
             finger_id, frame, x, y, depth_corrected,
             self.keyboard_surface_depth, timestamp, debug=self.debug_mode
         )
+
+        # ML-based tap filtering: use TapClassifier to reject false positives
+        # Uses low threshold (0.15) since the model has limited training data
+        if is_contact and self.tap_classifier:
+            depth_mm = debug_info.get('depth_cm', 0) * 10
+            velocity = abs(debug_info.get('velocity_y', 0))
+            tap_label, tap_prob = self.tap_classifier.predict_realtime(depth_mm, velocity, threshold=0.15)
+            debug_info['tap_classifier_prob'] = tap_prob
+            if tap_label == 0:
+                if self.debug_mode:
+                    print(f"  [TAP CLASSIFIER] Rejected (prob={tap_prob:.2f})")
+                is_contact = False
+
         if is_contact:
             # Finger pad offset: contact happens at pad (small offset below tip)
             contact_x = x
@@ -1343,6 +1401,8 @@ def main():
                         help='Diagnostic mode: print fingertip depth every frame (uses fine-tuned model)')
     parser.add_argument('--target', type=str, default=None,
                         help='Target phrase for CER calculation (e.g. "hello cvpr 2026")')
+    parser.add_argument('--autocorrect', action='store_true',
+                        help='Enable autocorrect on SPACE press')
 
     args = parser.parse_args()
 
@@ -1359,7 +1419,8 @@ def main():
             debug_mode=args.debug,
             use_real_keyboard=not args.no_keyboard,
             diagnose_mode=args.diagnose,
-            target_phrase=args.target
+            target_phrase=args.target,
+            use_autocorrect=args.autocorrect
         )
         keyboard.run()
     except KeyboardInterrupt:
