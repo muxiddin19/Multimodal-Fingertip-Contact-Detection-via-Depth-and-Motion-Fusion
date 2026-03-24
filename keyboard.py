@@ -488,17 +488,18 @@ class VelocityBasedContactDetector:
 
         # 6b. DEPTH APPROACH CHECK - require finger moved toward surface recently
         # This prevents hover-typing: horizontal movement triggers velocity
-        # but doesn't show depth approach toward the surface
+        # but doesn't show depth approach toward the surface.
+        # The fine-tuned model shows 2-5mm depth change during real taps.
         depth_approaching = False
         if finger_id in self.depth_history and len(self.depth_history[finger_id]) >= 3:
             recent_depths = list(self.depth_history[finger_id])
             # Check if depth increased (finger moved closer to surface) in last 3 frames
-            # With the default model, depth values are ~0.270. A tap shows slight increase.
             depth_trend = recent_depths[-1] - recent_depths[-3]
             # Positive trend = finger moving toward surface (depth value increases)
-            # Threshold: any positive trend counts (even tiny, since default model has tiny range)
-            depth_approaching = depth_trend > 0.0001  # ~0.01mm minimum approach
+            # Fine-tuned model: require at least 1mm approach
+            depth_approaching = depth_trend > 0.001  # 1mm minimum approach
             debug_info['depth_trend'] = depth_trend
+            debug_info['depth_trend_mm'] = depth_trend * 1000
         debug_info['depth_approaching'] = depth_approaching
 
         # DECISION LOGIC - Velocity + Depth approach (both required)
@@ -514,7 +515,7 @@ class VelocityBasedContactDetector:
                 self.tap_triggered[finger_id] = True
 
                 # Require BOTH depth hysteresis AND depth approach
-                if depth_ok and depth_approaching and (-0.5 < distance_cm < 0.8):
+                if depth_ok and depth_approaching and (-2.0 < distance_cm < 4.0):
                     confidence += 0.6
                 elif depth_ok and depth_approaching:
                     confidence += 0.3
@@ -609,11 +610,12 @@ class VRKeyboardCVPR2026:
         self._log_data = []
 
         # Initialize depth estimator
-        # Default weights (no checkpoint) produce compressed depth maps matching
-        # the paper's hysteresis thresholds (4.5mm entry / 6.0mm exit).
+        # Uses fine-tuned Depth Anything V2 (paper's main contribution)
+        # The model produces real metric depth (~0.38m for surface)
+        # Contact detection relies on depth approach gate (relative depth change)
         if DEPTH_MODEL_AVAILABLE:
             print("\n[LOADING] Depth model ...")
-            self.depth_checkpoint_path = depth_checkpoint
+            self.depth_checkpoint_path = depth_checkpoint or r"D:\Codes\vscode\Pretrained_weights\dav2\20260318latest.pth"
             self.depth_estimator = DepthEstimator(
                 model_type='depth_anything_v2',
                 custom_checkpoint=self.depth_checkpoint_path
@@ -624,13 +626,15 @@ class VRKeyboardCVPR2026:
             self.depth_estimator = None
 
         # Initialize contact detector
+        # Thresholds tuned for fine-tuned model (real metric depth)
+        # Finger hovers at 14-40mm, so entry at 35mm, exit at 45mm
         print("[LOADING] Velocity-based contact detector...")
         self.contact_detector = VelocityBasedContactDetector(
-            contact_entry_threshold_cm=0.45,  # 4.5mm
-            contact_exit_threshold_cm=0.6,    # 6.0mm
+            contact_entry_threshold_cm=3.5,   # 35mm - finger approaching surface
+            contact_exit_threshold_cm=4.5,    # 45mm - finger leaving surface
             required_contact_frames=1,
             cooldown_frames=8,
-            confidence_threshold=0.50  # Reject depth-only fallback (0.45), require velocity (0.60)
+            confidence_threshold=0.50
         )
 
         # TapClassifier disabled — needs more training data (>100 positive samples)
@@ -833,8 +837,11 @@ class VRKeyboardCVPR2026:
         print(f"    - Min peak velocity: {self.contact_detector.min_peak_velocity} px/s")
         print(f"  Cooldown: {self.contact_detector.cooldown_frames} frames")
         print(f"  Confidence threshold: {self.contact_detector.confidence_threshold}")
+        model_name = os.path.basename(self.depth_checkpoint_path) if self.depth_checkpoint_path else "Default (no weights)"
+        print(f"  Depth model: {model_name}")
         print(f"  Tracking: {finger_desc}")
         print(f"  Depth smoothing: One Euro Filter")
+        print(f"  Depth approach gate: Enabled (1mm min)")
         print(f"  Key selection: Gaussian Touch Model (sigma={self.touch_model.sigma_x:.0f}x{self.touch_model.sigma_y:.0f})")
         print(f"  Language Model: {'Enabled (alpha=' + f'{self.lm_alpha:.1f})' if self.language_model else 'Disabled'}")
         print(f"  TapClassifier: {'Enabled' if self.tap_classifier else 'Disabled'}")
@@ -1071,8 +1078,9 @@ class VRKeyboardCVPR2026:
             return (None, 0.0, {})
 
         # Sanity check: reject if too far from surface
+        # Fine-tuned model: finger can be up to ~17cm from surface when hovering
         distance_cm = (self.keyboard_surface_depth - depth_corrected) * 100
-        if abs(distance_cm) > 5.0:
+        if abs(distance_cm) > 20.0:
             return (None, 0.0, {'rejected': 'too_far', 'distance_cm': distance_cm})
 
         is_contact, confidence, debug_info = self.contact_detector.check_contact(
