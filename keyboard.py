@@ -515,7 +515,7 @@ class VelocityBasedContactDetector:
                 self.tap_triggered[finger_id] = True
 
                 # Require BOTH depth hysteresis AND depth approach
-                if depth_ok and depth_approaching and (-2.0 < distance_cm < 4.0):
+                if depth_ok and depth_approaching and (-5.0 < distance_cm < 14.0):
                     confidence += 0.6
                 elif depth_ok and depth_approaching:
                     confidence += 0.3
@@ -626,12 +626,13 @@ class VRKeyboardCVPR2026:
             self.depth_estimator = None
 
         # Initialize contact detector
-        # Thresholds tuned for fine-tuned model (real metric depth)
-        # Finger hovers at 14-40mm, so entry at 35mm, exit at 45mm
+        # Fine-tuned model shows finger at 5-13cm from surface.
+        # Hysteresis set wide to let finger "into the zone" — the depth
+        # approach gate (1mm trend) does the actual contact detection.
         print("[LOADING] Velocity-based contact detector...")
         self.contact_detector = VelocityBasedContactDetector(
-            contact_entry_threshold_cm=3.5,   # 35mm - finger approaching surface
-            contact_exit_threshold_cm=4.5,    # 45mm - finger leaving surface
+            contact_entry_threshold_cm=14.0,  # 140mm - finger in typing zone
+            contact_exit_threshold_cm=18.0,   # 180mm - finger left typing zone
             required_contact_frames=1,
             cooldown_frames=8,
             confidence_threshold=0.50
@@ -711,6 +712,8 @@ class VRKeyboardCVPR2026:
         self.typing_threshold_m = threshold_cm / 100.0
         self.keyboard_surface_depth = None
         self.is_calibrated = False
+        self._surface_depth_map = None
+        self._use_per_pixel_surface = False
 
         # State
         self.typed_text = ""
@@ -808,15 +811,23 @@ class VRKeyboardCVPR2026:
         print(f"    Std deviation: {std_depth:.3f}m")
         print(f"    Outliers removed: {len(depths) - len(depths_filtered)}")
 
-        # Calculate scale factor
-        self.actual_distance_m = known_distance_cm / 100.0
-        self.depth_scale_factor = self.actual_distance_m / median_depth if median_depth > 0 else 1.0
-        self.keyboard_surface_depth = self.actual_distance_m
+        # Use model's own depth as surface reference (no rescaling)
+        # The fine-tuned model outputs metric depth — trust it directly.
+        # This avoids scale distortion from forcing a known distance.
+        self.actual_distance_m = median_depth  # trust the model
+        self.depth_scale_factor = 1.0  # no rescaling
+        self.keyboard_surface_depth = median_depth
         self.is_calibrated = True
 
+        # Store the calibration depth map for per-pixel surface reference
+        # This handles tilted keyboards (top row closer, bottom row further)
+        self._surface_depth_map = depth_map.copy()
+        self._use_per_pixel_surface = True
+
         print(f"\n[SUCCESS] Auto-calibrated!")
-        print(f"  Scale factor: {self.depth_scale_factor:.4f}")
-        print(f"  Surface depth: {self.keyboard_surface_depth * 100:.1f}cm")
+        print(f"  Scale factor: {self.depth_scale_factor:.4f} (no rescaling)")
+        print(f"  Surface depth: {self.keyboard_surface_depth * 100:.1f}cm (model's own reading)")
+        print(f"  Per-pixel surface: Enabled (handles tilted keyboard)")
         print("=" * 70 + "\n")
         print("[READY] Start typing!")
 
@@ -1077,15 +1088,20 @@ class VRKeyboardCVPR2026:
         if not self.is_calibrated or self.keyboard_surface_depth is None:
             return (None, 0.0, {})
 
+        # Use per-pixel surface depth if available (handles tilted keyboard)
+        if hasattr(self, '_use_per_pixel_surface') and self._use_per_pixel_surface:
+            surface_at_finger = self._get_depth_at_point(self._surface_depth_map, x, y)
+        else:
+            surface_at_finger = self.keyboard_surface_depth
+
         # Sanity check: reject if too far from surface
-        # Fine-tuned model: finger can be up to ~17cm from surface when hovering
-        distance_cm = (self.keyboard_surface_depth - depth_corrected) * 100
+        distance_cm = (surface_at_finger - depth_corrected) * 100
         if abs(distance_cm) > 20.0:
             return (None, 0.0, {'rejected': 'too_far', 'distance_cm': distance_cm})
 
         is_contact, confidence, debug_info = self.contact_detector.check_contact(
             finger_id, frame, x, y, depth_corrected,
-            self.keyboard_surface_depth, timestamp, debug=self.debug_mode
+            surface_at_finger, timestamp, debug=self.debug_mode
         )
 
         # Multi-finger filter: per-finger thresholds + curl ratio check
