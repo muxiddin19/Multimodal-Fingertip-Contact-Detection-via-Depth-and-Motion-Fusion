@@ -486,7 +486,22 @@ class VelocityBasedContactDetector:
             return (False, 0.0, debug_info)
         debug_info['in_cooldown'] = False
 
-        # DECISION LOGIC - Velocity-based (PRIMARY) + Depth Check
+        # 6b. DEPTH APPROACH CHECK - require finger moved toward surface recently
+        # This prevents hover-typing: horizontal movement triggers velocity
+        # but doesn't show depth approach toward the surface
+        depth_approaching = False
+        if finger_id in self.depth_history and len(self.depth_history[finger_id]) >= 3:
+            recent_depths = list(self.depth_history[finger_id])
+            # Check if depth increased (finger moved closer to surface) in last 3 frames
+            # With the default model, depth values are ~0.270. A tap shows slight increase.
+            depth_trend = recent_depths[-1] - recent_depths[-3]
+            # Positive trend = finger moving toward surface (depth value increases)
+            # Threshold: any positive trend counts (even tiny, since default model has tiny range)
+            depth_approaching = depth_trend > 0.0001  # ~0.01mm minimum approach
+            debug_info['depth_trend'] = depth_trend
+        debug_info['depth_approaching'] = depth_approaching
+
+        # DECISION LOGIC - Velocity + Depth approach (both required)
         confidence = 0.0
 
         if velocity_contact:
@@ -498,14 +513,19 @@ class VelocityBasedContactDetector:
             else:
                 self.tap_triggered[finger_id] = True
 
-                if depth_ok and (-0.5 < distance_cm < 0.8):
+                # Require BOTH depth hysteresis AND depth approach
+                if depth_ok and depth_approaching and (-0.5 < distance_cm < 0.8):
                     confidence += 0.6
-                elif depth_ok:
+                elif depth_ok and depth_approaching:
                     confidence += 0.3
+                elif depth_ok:
+                    # Depth is near surface but no approach motion — likely hover
+                    confidence += 0.15  # Below threshold, will be rejected
+                    debug_info['hover_suspect'] = True
                 else:
                     confidence = 0.0
                     debug_info['rejected_depth'] = True
-        elif depth_ok:
+        elif depth_ok and depth_approaching:
             confidence += 0.2
             if is_stable:
                 confidence += 0.15
@@ -531,8 +551,10 @@ class VelocityBasedContactDetector:
         debug_info['contact_frames'] = self.contact_frames.get(finger_id, 0)
 
         if debug and (is_contact or velocity_contact):
-            print(f"\n[CONTACT - {finger_id}]")
-            print(f"  Depth: {distance_cm:.2f}cm (hysteresis: {depth_ok})")
+            hover = " [HOVER]" if debug_info.get('hover_suspect') else ""
+            approach = "yes" if depth_approaching else "no"
+            print(f"\n[CONTACT - {finger_id}]{hover}")
+            print(f"  Depth: {distance_cm:.2f}cm (hysteresis: {depth_ok}, approach: {approach})")
             print(f"  Velocity: {vy:.1f}px/s - State: {debug_info['tap_state']}")
             print(f"  Peak velocity: {debug_info['peak_velocity']:.1f}px/s")
             print(f"  Confidence: {confidence:.2f}")
