@@ -607,7 +607,7 @@ class VRKeyboardCVPR2026:
             contact_entry_threshold_cm=0.45,  # 4.5mm
             contact_exit_threshold_cm=0.6,    # 6.0mm
             required_contact_frames=1,
-            cooldown_frames=5,
+            cooldown_frames=8,
             confidence_threshold=0.50  # Reject depth-only fallback (0.45), require velocity (0.60)
         )
 
@@ -1099,43 +1099,17 @@ class VRKeyboardCVPR2026:
                            'shift', 'Shift'}
 
             # Simple nearest-center with hard distance threshold (proven reliable)
-            # Then use LM as tiebreaker when top 2 candidates are close
             best_key = None
             best_distance = float('inf')
-            second_key = None
-            second_distance = float('inf')
 
             for key in self.keys:
                 center_x, center_y = key['center']
                 distance = np.sqrt((contact_x - center_x)**2 + (contact_y - center_y)**2)
                 max_dist = 10 if key['name'] in STRICT_KEYS else 35
 
-                if distance < max_dist:
-                    if distance < best_distance:
-                        second_key = best_key
-                        second_distance = best_distance
-                        best_key = key
-                        best_distance = distance
-                    elif distance < second_distance:
-                        second_key = key
-                        second_distance = distance
-
-            # LM tiebreaker: if top 2 are within 8px, let LM decide
-            if best_key and second_key and self.language_model:
-                margin = second_distance - best_distance
-                if margin < 8:
-                    context = self.typed_text[-3:]
-                    score1 = self.language_model.score_char(
-                        best_key['name'].lower() if len(best_key['name']) == 1 else ' ', context)
-                    score2 = self.language_model.score_char(
-                        second_key['name'].lower() if len(second_key['name']) == 1 else ' ', context)
-                    if score2 > score1 + 0.3:  # LM strongly prefers second key
-                        if self.debug_mode:
-                            print(f"  [LM OVERRIDE] {best_key['name']} -> {second_key['name']} "
-                                  f"(dist: {best_distance:.1f} vs {second_distance:.1f}, "
-                                  f"LM: {score1:.2f} vs {score2:.2f})")
-                        best_key = second_key
-                        best_distance = second_distance
+                if distance < max_dist and distance < best_distance:
+                    best_distance = distance
+                    best_key = key
 
             if best_key:
                 if self.debug_mode:
