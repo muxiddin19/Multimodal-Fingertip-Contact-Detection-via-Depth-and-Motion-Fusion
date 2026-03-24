@@ -54,6 +54,9 @@ from src.language_model import CharLanguageModel
 # Import Multi-Finger Filter
 from src.multi_finger_filter import MultiFingerFilter
 
+# Import TCN Tap Detector
+from src.tcn_tap_detector import TCNTapDetector, collect_landmarks_for_training
+
 # Import Word Predictor
 from src.word_predictor import WordPredictor
 
@@ -598,11 +601,14 @@ class VRKeyboardCVPR2026:
         sigma_x: float = 20.0,
         sigma_y: float = 15.0,
         lm_weight: float = 0.7,
-        use_lm: bool = True
+        use_lm: bool = True,
+        collect_landmarks: bool = False
     ):
         self.diagnose_mode = diagnose_mode
         self._diagnose_log = []
         self.target_phrase = target_phrase
+        self.collect_landmarks = collect_landmarks
+        self._landmark_frame_idx = 0
         print("=" * 70)
         print("  VR KEYBOARD - CVPR 2026 IMPLEMENTATION (V1)")
         print("  Real-Time Multimodal Fingertip Contact Detection")
@@ -849,8 +855,8 @@ class VRKeyboardCVPR2026:
         print(f"  AutoCorrect: {'Enabled' if self.autocorrect else 'Disabled'}")
         print(f"  Word Prediction: Enabled (press 1/2/3 to accept)")
         print("=" * 70)
-        print("\n[CALIBRATION] Press 'A' for auto-calibration OR 'C' after clicking surface")
-        print("[CONTROLS] A=Auto-Cal | C=Manual-Cal | D=Debug | M=Metrics | Q=Quit")
+        print("\n[CALIBRATION] Press F5 for auto-calibration OR 'C' after clicking surface")
+        print("[CONTROLS] F5=Auto-Cal | C=Manual-Cal | D=Debug | M=Metrics | Q=Quit")
         print("[PREDICT]  1/2/3 = Accept word prediction")
         print("=" * 70 + "\n")
 
@@ -1409,6 +1415,10 @@ class VRKeyboardCVPR2026:
                         for fid in self.fingertip_landmarks:
                             self.finger_filter.update_curl(hand_idx, fid, hand_landmarks, frame.shape[:2])
 
+                        # Collect landmarks for TCN training
+                        if self.collect_landmarks:
+                            self._landmark_frame_idx += 1
+
                         for fingertip_id in self.fingertip_landmarks:
                             x, y, depth_corrected, _ = self._get_fingertip_depth(
                                 depth_map, hand_landmarks, fingertip_id, frame.shape[:2])
@@ -1439,6 +1449,14 @@ class VRKeyboardCVPR2026:
                             # Check for key press
                             pressed_key, confidence, debug_info = self._check_key_press(
                                 finger_id, frame, x, y, depth_corrected, start_time)
+
+                            # Collect landmarks for TCN training
+                            if self.collect_landmarks:
+                                label = 1 if pressed_key else 0
+                                collect_landmarks_for_training(
+                                    hand_landmarks, self._landmark_frame_idx,
+                                    label, 'tcn_training_data', frame.shape[:2]
+                                )
 
                             # Log data for analysis
                             if 'depth_cm' in debug_info and 'velocity_y' in debug_info:
@@ -1539,16 +1557,9 @@ class VRKeyboardCVPR2026:
                         calibration_point[0] = None
                     else:
                         print("[WARNING] Click on keyboard surface first!")
-                elif key == ord('a'):
+                elif key == 194:  # F5 key for auto-calibration (no letter conflict)
                     if depth_map is not None:
-                        print("\n[AUTO-CALIBRATION] Enter keyboard distance in cm (press Enter for 37cm):")
-                        try:
-                            user_input = input("Distance (cm) [37]: ").strip()
-                            distance_cm = float(user_input) if user_input else 37.0
-                            self.auto_calibrate_keyboard(depth_map, distance_cm)
-                        except ValueError:
-                            print("[ERROR] Invalid input, using default 37cm")
-                            self.auto_calibrate_keyboard(depth_map, 37.0)
+                        self.auto_calibrate_keyboard(depth_map, 37.0)
                     else:
                         print("[WARNING] No depth map available!")
                 elif key == ord('d'):
@@ -1600,12 +1611,14 @@ def main():
     parser.add_argument('--sigma-y', type=float, default=15.0, help='Gaussian touch sigma Y (pixels)')
     parser.add_argument('--lm-weight', type=float, default=0.7, help='Touch model weight vs LM (0-1)')
     parser.add_argument('--no-lm', action='store_true', help='Disable language model')
+    parser.add_argument('--collect-landmarks', action='store_true',
+                        help='Collect MediaPipe landmarks for TCN training')
 
     args = parser.parse_args()
 
     # In diagnose mode, force the fine-tuned checkpoint
     if args.diagnose and args.checkpoint is None:
-        args.checkpoint = r"D:\Codes\vscode\Pretrained_weights\dav2\20260318latest.pth"
+        args.checkpoint = r"D:\Codes\vscode\Pretrained_weights\dav2\20260318best.pth"
 
     try:
         keyboard = VRKeyboardCVPR2026(
@@ -1621,7 +1634,8 @@ def main():
             sigma_x=args.sigma_x,
             sigma_y=args.sigma_y,
             lm_weight=args.lm_weight,
-            use_lm=not args.no_lm
+            use_lm=not args.no_lm,
+            collect_landmarks=args.collect_landmarks
         )
         keyboard.run()
     except KeyboardInterrupt:
