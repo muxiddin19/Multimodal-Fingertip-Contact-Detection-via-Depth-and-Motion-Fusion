@@ -55,7 +55,7 @@ from src.language_model import CharLanguageModel
 from src.multi_finger_filter import MultiFingerFilter
 
 # Import TCN Tap Detector
-from src.tcn_tap_detector import TCNTapDetector, collect_landmarks_for_training
+from src.tcn_tap_detector import TCNTapDetector
 
 # Import Word Predictor
 from src.word_predictor import WordPredictor
@@ -745,13 +745,12 @@ class VRKeyboardCVPR2026:
                 self.mp_hands.HandLandmark.PINKY_TIP,
             ]
         else:
-            # Index + middle fingers (both hands) — TCN handles sympathetic motion
+            # Index fingers only — proven reliable (5.7 WPM, 0% CER)
             self.fingertip_landmarks = [
                 self.mp_hands.HandLandmark.INDEX_FINGER_TIP,
-                self.mp_hands.HandLandmark.MIDDLE_FINGER_TIP,
             ]
 
-        # Multi-finger tap filter (fallback if TCN not available)
+        # Multi-finger tap filter
         self.finger_filter = MultiFingerFilter(
             temporal_window_ms=100.0,
             curl_ratio_threshold=0.12,
@@ -759,18 +758,9 @@ class VRKeyboardCVPR2026:
             base_min_peak_velocity=15.0,
         )
 
-        # TCN Tap Detector — replaces threshold-based detection when available
-        tcn_model_path = os.path.join(os.path.dirname(__file__), 'src', 'tcn_tap_model.pth')
+        # TCN Tap Detector — disabled by default (domain gap with live camera)
+        # Enable with --tcn flag after fine-tuning on your specific setup
         self.tcn_detector = None
-        if os.path.isfile(tcn_model_path):
-            self.tcn_detector = TCNTapDetector(model_path=tcn_model_path)
-            print(f"[LOADED] TCN Tap Detector (F1=0.883, multi-finger enabled)")
-        else:
-            print(f"[INFO] TCN model not found at {tcn_model_path} — using threshold-based detection")
-            # Fall back to index-only without TCN
-            self.fingertip_landmarks = [
-                self.mp_hands.HandLandmark.INDEX_FINGER_TIP,
-            ]
 
         # Performance tracking
         self.fps = 0
@@ -1502,14 +1492,6 @@ class VRKeyboardCVPR2026:
                             pressed_key, confidence, debug_info = self._check_key_press(
                                 finger_id, frame, x, y, depth_corrected, start_time,
                                 tcn_probs=tcn_probs)
-
-                            # Collect landmarks for TCN training
-                            if self.collect_landmarks:
-                                label = 1 if pressed_key else 0
-                                collect_landmarks_for_training(
-                                    hand_landmarks, self._landmark_frame_idx,
-                                    label, 'tcn_training_data', frame.shape[:2]
-                                )
 
                             # Log data for analysis
                             if 'depth_cm' in debug_info and 'velocity_y' in debug_info:
