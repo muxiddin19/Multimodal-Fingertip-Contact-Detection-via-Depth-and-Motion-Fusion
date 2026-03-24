@@ -1090,72 +1090,56 @@ class VRKeyboardCVPR2026:
             contact_x = x
             contact_y = y + 6
 
-            # Edge/dangerous keys need higher touch probability
+            # Edge/dangerous keys need stricter distance
             STRICT_KEYS = {'backspace', 'Backspace', 'B.Spa', 'B.spa',
                            'delete', 'Delete', 'del',
                            'enter', 'Enter', 'return',
                            'esc', 'Esc', 'tab', 'Tab',
-                           'alt', 'Alt', 'ctrl', 'Ctrl', 'win', 'Win'}
+                           'alt', 'Alt', 'ctrl', 'Ctrl', 'win', 'Win',
+                           'shift', 'Shift'}
 
-            # Stage 1: Gaussian touch probabilities
-            touch_probs = self.touch_model.compute_key_probabilities(contact_x, contact_y)
-
-            # Get the top candidate by raw touch probability
-            top_key_name = max(touch_probs, key=touch_probs.get)
-            top_touch_p = touch_probs[top_key_name]
-
-            # If top candidate is a strict key that we'd block, return nothing
-            # (prevents fallthrough to wrong nearby keys like 'm')
-            if top_key_name in STRICT_KEYS:
-                center = next(k['center'] for k in self.keys if k['name'] == top_key_name)
-                dist = np.sqrt((contact_x - center[0])**2 + (contact_y - center[1])**2)
-                if dist > 10 or top_touch_p < 0.95:
-                    # Top candidate is blocked strict key — reject entirely
-                    return (None, confidence, debug_info)
-
-            # Minimum probability floor — reject if no strong candidate
-            if top_touch_p < 0.5:
-                return (None, confidence, debug_info)
-
-            # Stage 2: Language model rescoring (only among non-strict keys + allowed strict)
-            if self.language_model:
-                context = self.typed_text[-3:]
-                combined_scores = self.language_model.score_candidates(
-                    touch_probs, context, alpha=self.lm_alpha
-                )
-            else:
-                import math
-                combined_scores = {k: math.log(p + 1e-10) for k, p in touch_probs.items()}
-
-            # Select best key
+            # Simple nearest-center with hard distance threshold (proven reliable)
+            # Then use LM as tiebreaker when top 2 candidates are close
             best_key = None
-            best_score = -float('inf')
+            best_distance = float('inf')
+            second_key = None
+            second_distance = float('inf')
 
             for key in self.keys:
-                key_name = key['name']
-                score = combined_scores.get(key_name, -100.0)
+                center_x, center_y = key['center']
+                distance = np.sqrt((contact_x - center_x)**2 + (contact_y - center_y)**2)
+                max_dist = 10 if key['name'] in STRICT_KEYS else 35
 
-                # Strict keys: require BOTH high probability AND close distance
-                if key_name in STRICT_KEYS:
-                    cx, cy = key['center']
-                    dist = np.sqrt((contact_x - cx)**2 + (contact_y - cy)**2)
-                    if dist > 10 or touch_probs.get(key_name, 0) < 0.95:
-                        continue
+                if distance < max_dist:
+                    if distance < best_distance:
+                        second_key = best_key
+                        second_distance = best_distance
+                        best_key = key
+                        best_distance = distance
+                    elif distance < second_distance:
+                        second_key = key
+                        second_distance = distance
 
-                # Minimum touch probability for any key
-                if touch_probs.get(key_name, 0) < 0.01:
-                    continue
-
-                if score > best_score:
-                    best_score = score
-                    best_key = key
+            # LM tiebreaker: if top 2 are within 8px, let LM decide
+            if best_key and second_key and self.language_model:
+                margin = second_distance - best_distance
+                if margin < 8:
+                    context = self.typed_text[-3:]
+                    score1 = self.language_model.score_char(
+                        best_key['name'].lower() if len(best_key['name']) == 1 else ' ', context)
+                    score2 = self.language_model.score_char(
+                        second_key['name'].lower() if len(second_key['name']) == 1 else ' ', context)
+                    if score2 > score1 + 0.3:  # LM strongly prefers second key
+                        if self.debug_mode:
+                            print(f"  [LM OVERRIDE] {best_key['name']} -> {second_key['name']} "
+                                  f"(dist: {best_distance:.1f} vs {second_distance:.1f}, "
+                                  f"LM: {score1:.2f} vs {score2:.2f})")
+                        best_key = second_key
+                        best_distance = second_distance
 
             if best_key:
-                touch_p = touch_probs.get(best_key['name'], 0)
                 if self.debug_mode:
-                    top3 = self.touch_model.get_top_k(contact_x, contact_y, k=3)
-                    top3_str = ', '.join(f"{k}:{p:.2f}" for k, p in top3)
-                    print(f"[KEY SELECTED] {best_key['name']} (touch_p={touch_p:.2f}, top3=[{top3_str}])")
+                    print(f"[KEY SELECTED] {best_key['name']} (dist: {best_distance:.1f}px)")
                 return (best_key['name'], confidence, debug_info)
 
         return (None, confidence, debug_info)
