@@ -496,8 +496,8 @@ class VelocityBasedContactDetector:
             # Check if depth increased (finger moved closer to surface) in last 3 frames
             depth_trend = recent_depths[-1] - recent_depths[-3]
             # Positive trend = finger moving toward surface (depth value increases)
-            # Fine-tuned model: require at least 1mm approach
-            depth_approaching = depth_trend > 0.001  # 1mm minimum approach
+            # Fine-tuned model: require at least 3mm approach (filters depth noise)
+            depth_approaching = depth_trend > 0.003  # 3mm minimum approach
             debug_info['depth_trend'] = depth_trend
             debug_info['depth_trend_mm'] = depth_trend * 1000
         debug_info['depth_approaching'] = depth_approaching
@@ -852,7 +852,7 @@ class VRKeyboardCVPR2026:
         print(f"  Depth model: {model_name}")
         print(f"  Tracking: {finger_desc}")
         print(f"  Depth smoothing: One Euro Filter")
-        print(f"  Depth approach gate: Enabled (1mm min)")
+        print(f"  Depth approach gate: Enabled (3mm min)")
         print(f"  Key selection: Gaussian Touch Model (sigma={self.touch_model.sigma_x:.0f}x{self.touch_model.sigma_y:.0f})")
         print(f"  Language Model: {'Enabled (alpha=' + f'{self.lm_alpha:.1f})' if self.language_model else 'Disabled'}")
         print(f"  TapClassifier: {'Enabled' if self.tap_classifier else 'Disabled'}")
