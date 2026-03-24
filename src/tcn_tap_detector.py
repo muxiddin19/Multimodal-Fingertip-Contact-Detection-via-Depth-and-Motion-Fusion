@@ -2,61 +2,52 @@
 TCN Tap Detector for VR Keyboard
 ==================================
 Temporal Convolutional Network that maps hand pose sequences
-directly to tap probabilities, replacing threshold-based detection.
+directly to per-fingertip contact probabilities.
+
+Trained on the CVPR 2026 dataset (P01-P18, 102K+ labeled frames)
+with per-fingertip contact/hover annotations.
 
 Architecture:
-- Input: 63 features per frame (21 MediaPipe landmarks × 3 coords)
-- 3-layer 1D TCN with causal convolutions
-- Output: per-frame tap probability (binary classification)
-- Real-time inference at 30fps
+- Input: 47 features per frame (21 landmarks × 2 coords + 5 fingertip depths)
+- 3-layer 1D TCN with causal convolutions (64 channels)
+- Output: 5 per-fingertip contact probabilities
 
 References:
 - Decoding Surface Touch Typing (Meta, UIST 2020): 73 WPM
 - StegoType (Meta, UIST 2024): 75 WPM
-- TouchInsight (ETH/Meta, UIST 2024): 37 WPM
-
-Training:
-    detector = TCNTapDetector()
-    detector.train_from_sessions('training_data/')
-    detector.save('tcn_tap_model.pth')
-
-Inference:
-    detector = TCNTapDetector.load('tcn_tap_model.pth')
-    # Each frame:
-    tap_prob = detector.predict_frame(landmarks_63d)
 """
 
 import os
-import time
+import json
+import glob
 import numpy as np
 from collections import deque
-from typing import List, Optional, Tuple, Dict
+from typing import List, Optional, Tuple
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torch.utils.data import Dataset, DataLoader
 
+
+# ======================== Model Architecture ========================
 
 class CausalConv1d(nn.Module):
-    """Causal convolution: only looks at past frames, not future."""
-
-    def __init__(self, in_channels: int, out_channels: int, kernel_size: int, dilation: int = 1):
+    """Causal convolution: only looks at past frames."""
+    def __init__(self, in_ch, out_ch, kernel_size, dilation=1):
         super().__init__()
         self.padding = (kernel_size - 1) * dilation
-        self.conv = nn.Conv1d(in_channels, out_channels, kernel_size,
+        self.conv = nn.Conv1d(in_ch, out_ch, kernel_size,
                               padding=self.padding, dilation=dilation)
 
     def forward(self, x):
         out = self.conv(x)
-        if self.padding > 0:
-            out = out[:, :, :-self.padding]
-        return out
+        return out[:, :, :-self.padding] if self.padding > 0 else out
 
 
 class TCNBlock(nn.Module):
     """Single TCN block with residual connection."""
-
-    def __init__(self, channels: int, kernel_size: int, dilation: int):
+    def __init__(self, channels, kernel_size, dilation):
         super().__init__()
         self.conv1 = CausalConv1d(channels, channels, kernel_size, dilation)
         self.conv2 = CausalConv1d(channels, channels, kernel_size, dilation)
@@ -65,202 +56,380 @@ class TCNBlock(nn.Module):
         self.dropout = nn.Dropout(0.1)
 
     def forward(self, x):
-        residual = x
-        out = F.relu(self.bn1(self.conv1(x)))
-        out = self.dropout(out)
-        out = F.relu(self.bn2(self.conv2(out)))
-        out = self.dropout(out)
-        return out + residual
+        out = self.dropout(F.relu(self.bn1(self.conv1(x))))
+        out = self.dropout(F.relu(self.bn2(self.conv2(out))))
+        return out + x
 
 
 class TCNModel(nn.Module):
     """
-    Temporal Convolutional Network for tap detection.
+    TCN for per-fingertip contact detection.
 
-    Input: (batch, 63, seq_len) — 21 landmarks × 3 coords
-    Output: (batch, 1, seq_len) — per-frame tap probability
+    Input:  (batch, 47, seq_len)
+    Output: (batch, 5, seq_len) — 5 fingertip contact logits
     """
-
-    def __init__(self, input_dim: int = 63, hidden_dim: int = 64, num_layers: int = 3, kernel_size: int = 5):
+    def __init__(self, input_dim=47, hidden_dim=64, num_layers=3,
+                 kernel_size=5, num_fingers=5):
         super().__init__()
-
-        # Input projection
         self.input_proj = nn.Conv1d(input_dim, hidden_dim, 1)
-
-        # TCN blocks with exponentially increasing dilation
         self.blocks = nn.ModuleList([
             TCNBlock(hidden_dim, kernel_size, dilation=2**i)
             for i in range(num_layers)
         ])
-
-        # Output projection
-        self.output_proj = nn.Conv1d(hidden_dim, 1, 1)
+        self.output_proj = nn.Conv1d(hidden_dim, num_fingers, 1)
 
     def forward(self, x):
-        """
-        Args:
-            x: (batch, input_dim, seq_len)
-        Returns:
-            (batch, 1, seq_len) — logits (apply sigmoid for probability)
-        """
         out = F.relu(self.input_proj(x))
         for block in self.blocks:
             out = block(out)
         return self.output_proj(out)
 
 
+# ======================== Dataset ========================
+
+FINGER_NAMES = ['thumb', 'index', 'middle', 'ring', 'pinky']
+
+
+def load_frame_features(ann_path: str) -> Optional[np.ndarray]:
+    """
+    Extract 47-dim feature vector from an annotation JSON file.
+    Features: 21 landmarks × 2 (x,y normalized) + 5 fingertip depths
+    Returns None if no hand detected.
+    """
+    with open(ann_path, 'r') as f:
+        ann = json.load(f)
+
+    if ann.get('num_hands', 0) == 0 or not ann.get('hands'):
+        return None
+
+    hand = ann['hands'][0]  # use first hand
+    landmarks = hand.get('landmarks_px', [])
+    if len(landmarks) != 21:
+        return None
+
+    # Normalize landmarks to 0-1 range (assuming 640x480)
+    features = []
+    for lm in landmarks:
+        features.append(lm[0] / 640.0)
+        features.append(lm[1] / 480.0)
+
+    # Add fingertip depths
+    depths = hand.get('fingertip_depths_m', {})
+    for finger in FINGER_NAMES:
+        features.append(depths.get(finger, 0.3))
+
+    return np.array(features, dtype=np.float32)  # (47,)
+
+
+def load_frame_labels(label_path: str) -> Optional[np.ndarray]:
+    """
+    Extract 5-dim binary label vector from a label JSON file.
+    Returns None if no hand detected.
+    """
+    with open(label_path, 'r') as f:
+        lab = json.load(f)
+
+    if lab.get('num_hands', 0) == 0 or not lab.get('hands'):
+        return None
+
+    hand = lab['hands'][0]
+    fingertips = hand.get('fingertips', {})
+
+    labels = []
+    for finger in FINGER_NAMES:
+        ft = fingertips.get(finger, {})
+        state = ft.get('state', 'hover')
+        labels.append(1.0 if state == 'contact' else 0.0)
+
+    return np.array(labels, dtype=np.float32)  # (5,)
+
+
+class TapDataset(Dataset):
+    """
+    Dataset of sliding windows from the CVPR 2026 typing sessions.
+
+    Each sample is a (features, labels) pair:
+    - features: (47, window_size) tensor
+    - labels: (5, window_size) tensor (per-fingertip contact)
+    """
+    def __init__(self, data_root: str, window_size: int = 30,
+                 stride: int = 5, participants: Optional[List[str]] = None):
+        self.window_size = window_size
+        self.samples = []  # list of (features_array, labels_array) per session
+
+        # Find all sessions
+        sessions = []
+        for p_dir in sorted(glob.glob(os.path.join(data_root, 'P*'))):
+            p_name = os.path.basename(p_dir)
+            if participants and p_name not in participants:
+                continue
+            for sess_dir in sorted(glob.glob(os.path.join(p_dir, f'{p_name}_*'))):
+                ann_dir = os.path.join(sess_dir, 'annotations')
+                lab_dir = os.path.join(sess_dir, 'labels')
+                if os.path.isdir(ann_dir) and os.path.isdir(lab_dir):
+                    sessions.append((ann_dir, lab_dir))
+
+        print(f"[TCN Dataset] Found {len(sessions)} sessions")
+
+        # Load all sessions
+        self._windows = []
+        for ann_dir, lab_dir in sessions:
+            frames = sorted(glob.glob(os.path.join(ann_dir, '*.json')))
+            sess_features = []
+            sess_labels = []
+
+            for frame_path in frames:
+                frame_id = os.path.splitext(os.path.basename(frame_path))[0]
+                label_path = os.path.join(lab_dir, f'{frame_id}.json')
+
+                if not os.path.exists(label_path):
+                    continue
+
+                feat = load_frame_features(frame_path)
+                lab = load_frame_labels(label_path)
+
+                if feat is not None and lab is not None:
+                    sess_features.append(feat)
+                    sess_labels.append(lab)
+
+            if len(sess_features) < window_size:
+                continue
+
+            sess_features = np.array(sess_features)  # (N, 47)
+            sess_labels = np.array(sess_labels)      # (N, 5)
+
+            # Create sliding windows
+            for start in range(0, len(sess_features) - window_size, stride):
+                end = start + window_size
+                self._windows.append((
+                    sess_features[start:end].T,  # (47, W)
+                    sess_labels[start:end].T      # (5, W)
+                ))
+
+        print(f"[TCN Dataset] Created {len(self._windows)} training windows")
+
+    def __len__(self):
+        return len(self._windows)
+
+    def __getitem__(self, idx):
+        feat, lab = self._windows[idx]
+        return torch.from_numpy(feat), torch.from_numpy(lab)
+
+
+# ======================== Detector ========================
+
 class TCNTapDetector:
     """
-    Real-time tap detector using a small TCN.
-
-    Maintains a sliding window of recent frames and runs inference
-    on each new frame to produce a tap probability.
+    Real-time tap detector using a small TCN trained on the CVPR 2026 dataset.
     """
 
-    # MediaPipe landmark count
-    NUM_LANDMARKS = 21
-    INPUT_DIM = NUM_LANDMARKS * 3  # x, y, z per landmark
-    WINDOW_SIZE = 30  # ~1 second at 30fps
+    INPUT_DIM = 47  # 21 landmarks × 2 + 5 depths
+    WINDOW_SIZE = 30
 
-    def __init__(self, model_path: Optional[str] = None, device: str = 'cpu'):
-        self.device = device
-        self.model = TCNModel(
-            input_dim=self.INPUT_DIM,
-            hidden_dim=64,
-            num_layers=3,
-            kernel_size=5
-        ).to(device)
+    def __init__(self, model_path: Optional[str] = None, device: str = None):
+        if device is None:
+            self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        else:
+            self.device = device
 
-        # Sliding window buffer
+        self.model = TCNModel(input_dim=self.INPUT_DIM).to(self.device)
         self._buffer = deque(maxlen=self.WINDOW_SIZE)
         self._is_trained = False
 
-        # Try to load pre-trained model
         if model_path and os.path.isfile(model_path):
             self.load(model_path)
 
-    def extract_features(self, hand_landmarks, image_shape: Tuple[int, int]) -> np.ndarray:
-        """
-        Extract 63-dim feature vector from MediaPipe hand landmarks.
-
-        Args:
-            hand_landmarks: MediaPipe hand landmarks object
-            image_shape: (height, width) for normalization
-
-        Returns:
-            numpy array of shape (63,) — normalized landmark positions
-        """
+    def extract_features_from_mediapipe(self, hand_landmarks, image_shape,
+                                         depth_map=None) -> np.ndarray:
+        """Extract 47-dim features from live MediaPipe landmarks."""
         h, w = image_shape
-        features = np.zeros(self.INPUT_DIM, dtype=np.float32)
+        features = []
 
-        for i, landmark in enumerate(hand_landmarks.landmark):
-            features[i * 3] = landmark.x  # already normalized 0-1
-            features[i * 3 + 1] = landmark.y
-            features[i * 3 + 2] = landmark.z  # relative depth
+        # 21 landmarks × 2 coords (normalized)
+        for lm in hand_landmarks.landmark:
+            features.append(lm.x)  # already 0-1
+            features.append(lm.y)
 
-        return features
+        # 5 fingertip depths (from depth map if available)
+        tip_ids = [4, 8, 12, 16, 20]
+        for tip_id in tip_ids:
+            if depth_map is not None:
+                lm = hand_landmarks.landmark[tip_id]
+                px = int(lm.x * w)
+                py = int(lm.y * h)
+                px = max(0, min(px, w - 1))
+                py = max(0, min(py, h - 1))
+                features.append(float(depth_map[py, px]))
+            else:
+                features.append(hand_landmarks.landmark[tip_id].z)
 
-    def update_buffer(self, features: np.ndarray):
-        """Add a frame's features to the sliding window."""
+        return np.array(features, dtype=np.float32)
+
+    def predict_frame(self, features: np.ndarray) -> np.ndarray:
+        """
+        Predict per-fingertip contact probabilities.
+
+        Returns: array of 5 probabilities [thumb, index, middle, ring, pinky]
+        """
         self._buffer.append(features)
 
-    def predict_frame(self, features: Optional[np.ndarray] = None) -> float:
-        """
-        Predict tap probability for the current frame.
+        if not self._is_trained or len(self._buffer) < 5:
+            return np.zeros(5)
 
-        Args:
-            features: 63-dim feature vector (if None, uses last buffered frame)
-
-        Returns:
-            Tap probability (0-1). Returns 0.0 if model not trained or buffer too small.
-        """
-        if not self._is_trained:
-            return 0.0
-
-        if features is not None:
-            self.update_buffer(features)
-
-        if len(self._buffer) < 5:  # need at least 5 frames
-            return 0.0
-
-        # Prepare input tensor: (1, 63, seq_len)
-        buf = np.array(list(self._buffer), dtype=np.float32)  # (seq_len, 63)
-        x = torch.from_numpy(buf.T).unsqueeze(0).to(self.device)  # (1, 63, seq_len)
+        buf = np.array(list(self._buffer), dtype=np.float32)
+        x = torch.from_numpy(buf.T).unsqueeze(0).to(self.device)
 
         with torch.no_grad():
-            logits = self.model(x)  # (1, 1, seq_len)
-            prob = torch.sigmoid(logits[0, 0, -1]).item()  # last frame probability
+            logits = self.model(x)
+            probs = torch.sigmoid(logits[0, :, -1]).cpu().numpy()
 
-        return prob
+        return probs  # (5,) — one probability per fingertip
 
-    def train_from_csv(
-        self,
-        csv_path: str,
-        landmarks_dir: str,
-        epochs: int = 50,
-        lr: float = 0.001,
-        batch_size: int = 32,
-        save_path: Optional[str] = None,
-        verbose: bool = True
-    ):
+    def train(self, data_root: str, epochs: int = 30, lr: float = 0.001,
+              batch_size: int = 64, save_path: str = 'src/tcn_tap_model.pth',
+              val_split: float = 0.15):
         """
-        Train the TCN from collected data.
+        Train the TCN on the CVPR 2026 dataset.
 
         Args:
-            csv_path: Path to depth_velocity_log.csv (with label column)
-            landmarks_dir: Directory containing per-frame landmark files
-            epochs: Training epochs
+            data_root: Path to full_data/ directory
+            epochs: Number of training epochs
             lr: Learning rate
             batch_size: Batch size
             save_path: Where to save the trained model
-            verbose: Print training progress
+            val_split: Fraction of data for validation
         """
-        # This is a scaffold — full implementation requires:
-        # 1. Collecting landmark data during typing sessions
-        # 2. Saving per-frame landmarks alongside the CSV labels
-        # 3. Creating sliding window training samples
-        # 4. Training with binary cross-entropy loss
+        print(f"\n{'='*60}")
+        print(f"  TCN TAP DETECTOR TRAINING")
+        print(f"{'='*60}")
 
-        if verbose:
-            print("[TCN] Training scaffold - collecting data format:")
-            print(f"  CSV: {csv_path}")
-            print(f"  Landmarks dir: {landmarks_dir}")
-            print("  To collect training data, run with --collect-landmarks flag")
-            print("  Training will be available once sufficient data is collected")
+        # Load dataset
+        dataset = TapDataset(data_root, window_size=self.WINDOW_SIZE, stride=5)
+        if len(dataset) == 0:
+            print("[ERROR] No training data found!")
+            return
+
+        # Split train/val
+        n_val = int(len(dataset) * val_split)
+        n_train = len(dataset) - n_val
+        train_set, val_set = torch.utils.data.random_split(
+            dataset, [n_train, n_val],
+            generator=torch.Generator().manual_seed(42)
+        )
+
+        train_loader = DataLoader(train_set, batch_size=batch_size, shuffle=True,
+                                  num_workers=0, pin_memory=True)
+        val_loader = DataLoader(val_set, batch_size=batch_size, shuffle=False,
+                                num_workers=0)
+
+        print(f"  Train samples: {n_train}")
+        print(f"  Val samples: {n_val}")
+        print(f"  Device: {self.device}")
+        print(f"{'='*60}\n")
+
+        # Compute class weights (contact is rarer than hover)
+        all_labels = np.array([dataset[i][1].numpy() for i in range(len(dataset))])
+        pos_count = all_labels.sum(axis=(0, 2))  # per finger
+        neg_count = all_labels.shape[0] * all_labels.shape[2] - pos_count
+        pos_weight = torch.from_numpy(neg_count / (pos_count + 1)).float().to(self.device)
+        print(f"  Pos weights per finger: {pos_weight.cpu().numpy().round(2)}")
+
+        # Training
+        optimizer = torch.optim.Adam(self.model.parameters(), lr=lr)
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs)
+        criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight.unsqueeze(1))
+
+        best_val_f1 = 0.0
+        self.model.train()
+
+        for epoch in range(epochs):
+            # Train
+            train_loss = 0
+            for feat, lab in train_loader:
+                feat = feat.to(self.device)
+                lab = lab.to(self.device)
+
+                logits = self.model(feat)
+                loss = criterion(logits, lab)
+
+                optimizer.zero_grad()
+                loss.backward()
+                optimizer.step()
+                train_loss += loss.item()
+
+            train_loss /= len(train_loader)
+            scheduler.step()
+
+            # Validate
+            self.model.eval()
+            val_tp = np.zeros(5)
+            val_fp = np.zeros(5)
+            val_fn = np.zeros(5)
+
+            with torch.no_grad():
+                for feat, lab in val_loader:
+                    feat = feat.to(self.device)
+                    lab = lab.to(self.device)
+
+                    logits = self.model(feat)
+                    preds = (torch.sigmoid(logits) > 0.5).float()
+
+                    for f in range(5):
+                        val_tp[f] += ((preds[:, f] == 1) & (lab[:, f] == 1)).sum().item()
+                        val_fp[f] += ((preds[:, f] == 1) & (lab[:, f] == 0)).sum().item()
+                        val_fn[f] += ((preds[:, f] == 0) & (lab[:, f] == 1)).sum().item()
+
+            self.model.train()
+
+            # Per-finger F1
+            precision = val_tp / (val_tp + val_fp + 1e-8)
+            recall = val_tp / (val_tp + val_fn + 1e-8)
+            f1 = 2 * precision * recall / (precision + recall + 1e-8)
+            mean_f1 = f1.mean()
+
+            if (epoch + 1) % 5 == 0 or epoch == 0:
+                finger_f1 = ' '.join(f'{FINGER_NAMES[i]}:{f1[i]:.3f}' for i in range(5))
+                print(f"  Epoch {epoch+1:3d}/{epochs} | loss={train_loss:.4f} | "
+                      f"val_F1={mean_f1:.3f} | {finger_f1}")
+
+            if mean_f1 > best_val_f1:
+                best_val_f1 = mean_f1
+                self.save(save_path)
+
+        print(f"\n  Best val F1: {best_val_f1:.3f}")
+        print(f"  Model saved to: {save_path}")
+        self._is_trained = True
 
     def save(self, path: str):
-        """Save trained model."""
         torch.save({
             'model_state_dict': self.model.state_dict(),
-            'is_trained': self._is_trained,
+            'is_trained': True,
         }, path)
-        print(f"[TCN] Model saved to {path}")
 
     def load(self, path: str):
-        """Load trained model."""
         checkpoint = torch.load(path, map_location=self.device, weights_only=True)
         self.model.load_state_dict(checkpoint['model_state_dict'])
         self._is_trained = checkpoint.get('is_trained', True)
         self.model.eval()
-        print(f"[TCN] Model loaded from {path}")
+        print(f"[TCN] Loaded model from {path}")
 
     def reset(self):
-        """Clear the frame buffer (e.g., between sessions)."""
         self._buffer.clear()
 
 
-def collect_landmarks_for_training(hand_landmarks, frame_idx: int, label: int,
-                                    output_dir: str, image_shape: Tuple[int, int]):
-    """
-    Utility to save landmark data during typing sessions for later training.
+# ======================== CLI Training ========================
 
-    Call this every frame during a labeled typing session.
-    Creates a .npy file per frame with the 63-dim feature vector + label.
-    """
-    os.makedirs(output_dir, exist_ok=True)
+if __name__ == '__main__':
+    import argparse
+    parser = argparse.ArgumentParser(description='Train TCN Tap Detector')
+    parser.add_argument('--data', type=str, default=r'D:\VoiceAI\CVPR2026\data1\full_data',
+                        help='Path to full_data directory')
+    parser.add_argument('--epochs', type=int, default=30)
+    parser.add_argument('--batch-size', type=int, default=64)
+    parser.add_argument('--lr', type=float, default=0.001)
+    parser.add_argument('--save', type=str, default='src/tcn_tap_model.pth')
+    args = parser.parse_args()
 
     detector = TCNTapDetector()
-    features = detector.extract_features(hand_landmarks, image_shape)
-
-    data = np.concatenate([features, [float(label)]])  # 64-dim: 63 features + 1 label
-    np.save(os.path.join(output_dir, f"frame_{frame_idx:06d}.npy"), data)
+    detector.train(args.data, epochs=args.epochs, lr=args.lr,
+                   batch_size=args.batch_size, save_path=args.save)
