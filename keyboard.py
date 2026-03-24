@@ -745,21 +745,32 @@ class VRKeyboardCVPR2026:
                 self.mp_hands.HandLandmark.PINKY_TIP,
             ]
         else:
-            # Index fingers only (both hands) — proven reliable configuration
-            # Middle finger disabled: MediaPipe can't distinguish intentional
-            # taps from sympathetic motion without a neural decoder
+            # Index + middle fingers (both hands) — TCN handles sympathetic motion
             self.fingertip_landmarks = [
                 self.mp_hands.HandLandmark.INDEX_FINGER_TIP,
+                self.mp_hands.HandLandmark.MIDDLE_FINGER_TIP,
             ]
 
-        # Multi-finger tap filter (per-finger thresholds + curl ratio + temporal dedup)
+        # Multi-finger tap filter (fallback if TCN not available)
         self.finger_filter = MultiFingerFilter(
             temporal_window_ms=100.0,
             curl_ratio_threshold=0.12,
             base_velocity_threshold=8.0,
             base_min_peak_velocity=15.0,
         )
-        print(f"[LOADED] Multi-finger filter (per-finger thresholds + curl ratio)")
+
+        # TCN Tap Detector — replaces threshold-based detection when available
+        tcn_model_path = os.path.join(os.path.dirname(__file__), 'src', 'tcn_tap_model.pth')
+        self.tcn_detector = None
+        if os.path.isfile(tcn_model_path):
+            self.tcn_detector = TCNTapDetector(model_path=tcn_model_path)
+            print(f"[LOADED] TCN Tap Detector (F1=0.883, multi-finger enabled)")
+        else:
+            print(f"[INFO] TCN model not found at {tcn_model_path} — using threshold-based detection")
+            # Fall back to index-only without TCN
+            self.fingertip_landmarks = [
+                self.mp_hands.HandLandmark.INDEX_FINGER_TIP,
+            ]
 
         # Performance tracking
         self.fps = 0
@@ -851,6 +862,7 @@ class VRKeyboardCVPR2026:
         print(f"  Depth approach gate: Enabled")
         print(f"  Key selection: Gaussian Touch Model (sigma={self.touch_model.sigma_x:.0f}x{self.touch_model.sigma_y:.0f})")
         print(f"  Language Model: {'Enabled (alpha=' + f'{self.lm_alpha:.1f})' if self.language_model else 'Disabled'}")
+        print(f"  TCN Detector: {'Enabled (F1=0.883)' if self.tcn_detector else 'Disabled'}")
         print(f"  TapClassifier: {'Enabled' if self.tap_classifier else 'Disabled'}")
         print(f"  AutoCorrect: {'Enabled' if self.autocorrect else 'Disabled'}")
         print(f"  Word Prediction: Enabled (press 1/2/3 to accept)")
@@ -1078,39 +1090,70 @@ class VRKeyboardCVPR2026:
         x: int,
         y: int,
         depth_corrected: float,
-        timestamp: float
+        timestamp: float,
+        tcn_probs: np.ndarray = None
     ) -> Tuple[Optional[str], float, Dict]:
-        """Check for key press using contact detector."""
+        """Check for key press using TCN or threshold-based contact detector."""
         if not self.is_calibrated or self.keyboard_surface_depth is None:
             return (None, 0.0, {})
 
-        # Sanity check: reject if too far from surface
-        distance_cm = (self.keyboard_surface_depth - depth_corrected) * 100
-        if abs(distance_cm) > 5.0:
-            return (None, 0.0, {'rejected': 'too_far', 'distance_cm': distance_cm})
+        debug_info = {}
 
-        is_contact, confidence, debug_info = self.contact_detector.check_contact(
-            finger_id, frame, x, y, depth_corrected,
-            self.keyboard_surface_depth, timestamp, debug=self.debug_mode
-        )
-
-        # Multi-finger filter: per-finger thresholds + curl ratio check
-        if is_contact and self.finger_filter:
-            # Parse hand_idx and fingertip_id from finger_id ("h0_f8")
+        # TCN-based contact detection (primary when available)
+        if tcn_probs is not None and self.tcn_detector:
+            # Map fingertip_id to TCN output index
+            finger_map = {4: 0, 8: 1, 12: 2, 16: 3, 20: 4}  # tip_id -> TCN index
             parts = finger_id.split('_')
-            hand_idx = int(parts[0][1:])
             fingertip_id = int(parts[1][1:])
-            peak_vel = debug_info.get('peak_velocity', 0)
+            tcn_idx = finger_map.get(fingertip_id, 1)
 
-            accept, reason = self.finger_filter.should_accept(
-                hand_idx, fingertip_id, peak_vel, timestamp, debug=self.debug_mode
-            )
-            if not accept:
-                if self.debug_mode:
-                    print(f"  [FINGER FILTER] Rejected: {reason}")
+            tcn_prob = float(tcn_probs[tcn_idx])
+            debug_info['tcn_prob'] = tcn_prob
+            debug_info['tcn_finger'] = ['thumb', 'index', 'middle', 'ring', 'pinky'][tcn_idx]
+
+            # TCN contact threshold
+            is_contact = tcn_prob > 0.5
+            confidence = tcn_prob
+
+            # Cooldown check (reuse existing cooldown mechanism)
+            if self.contact_detector.cooldown_counter.get(finger_id, 0) > 0:
+                self.contact_detector.cooldown_counter[finger_id] -= 1
                 is_contact = False
 
-        # ML-based tap filtering (disabled until more training data)
+            if is_contact:
+                self.contact_detector.cooldown_counter[finger_id] = self.contact_detector.cooldown_frames
+
+            if self.debug_mode and is_contact:
+                print(f"\n[TCN CONTACT - {finger_id}]")
+                print(f"  TCN prob: {tcn_prob:.3f} ({debug_info['tcn_finger']})")
+                print(f"  Position: ({x}, {y})")
+
+        else:
+            # Fallback: threshold-based detection
+            distance_cm = (self.keyboard_surface_depth - depth_corrected) * 100
+            if abs(distance_cm) > 5.0:
+                return (None, 0.0, {'rejected': 'too_far', 'distance_cm': distance_cm})
+
+            is_contact, confidence, debug_info = self.contact_detector.check_contact(
+                finger_id, frame, x, y, depth_corrected,
+                self.keyboard_surface_depth, timestamp, debug=self.debug_mode
+            )
+
+            # Multi-finger filter (only for fallback mode)
+            if is_contact and self.finger_filter and not self.tcn_detector:
+                parts = finger_id.split('_')
+                hand_idx = int(parts[0][1:])
+                fingertip_id = int(parts[1][1:])
+                peak_vel = debug_info.get('peak_velocity', 0)
+                accept, reason = self.finger_filter.should_accept(
+                    hand_idx, fingertip_id, peak_vel, timestamp, debug=self.debug_mode
+                )
+                if not accept:
+                    if self.debug_mode:
+                        print(f"  [FINGER FILTER] Rejected: {reason}")
+                    is_contact = False
+
+        # ML-based tap filtering (disabled)
         if is_contact and self.tap_classifier:
             depth_mm = debug_info.get('depth_cm', 0) * 10
             velocity = abs(debug_info.get('velocity_y', 0))
@@ -1415,6 +1458,15 @@ class VRKeyboardCVPR2026:
                         for fid in self.fingertip_landmarks:
                             self.finger_filter.update_curl(hand_idx, fid, hand_landmarks, frame.shape[:2])
 
+                        # TCN: extract features and predict contact per fingertip
+                        tcn_probs = None
+                        if self.tcn_detector:
+                            tcn_features = self.tcn_detector.extract_features_from_mediapipe(
+                                hand_landmarks, frame.shape[:2], depth_map
+                            )
+                            tcn_probs = self.tcn_detector.predict_frame(tcn_features)
+                            # tcn_probs: [thumb, index, middle, ring, pinky]
+
                         # Collect landmarks for TCN training
                         if self.collect_landmarks:
                             self._landmark_frame_idx += 1
@@ -1446,9 +1498,10 @@ class VRKeyboardCVPR2026:
                                           f"surface={surface_d:.4f}m "
                                           f"dist={dist_mm:.1f}mm")
 
-                            # Check for key press
+                            # Check for key press (TCN or threshold-based)
                             pressed_key, confidence, debug_info = self._check_key_press(
-                                finger_id, frame, x, y, depth_corrected, start_time)
+                                finger_id, frame, x, y, depth_corrected, start_time,
+                                tcn_probs=tcn_probs)
 
                             # Collect landmarks for TCN training
                             if self.collect_landmarks:

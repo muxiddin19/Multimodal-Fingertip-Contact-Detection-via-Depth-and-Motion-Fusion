@@ -16,7 +16,8 @@ References:
 - Decoding Surface Touch Typing (Meta, UIST 2020): 73 WPM
 - StegoType (Meta, UIST 2024): 75 WPM
 """
-
+#Usage:
+#(vr1) PS D:\Codes\vscode\abs_depth\cam_keyb4_1> python src/tcn_tap_detector.py --data  "D:\VoiceAI\CVPR2026\data1\full_data" --epochs 3000 
 import os
 import json
 import glob
@@ -68,7 +69,7 @@ class TCNModel(nn.Module):
     Input:  (batch, 47, seq_len)
     Output: (batch, 5, seq_len) — 5 fingertip contact logits
     """
-    def __init__(self, input_dim=47, hidden_dim=64, num_layers=3,
+    def __init__(self, input_dim=47, hidden_dim=512, num_layers=3,
                  kernel_size=5, num_fingers=5):
         super().__init__()
         self.input_proj = nn.Conv1d(input_dim, hidden_dim, 1)
@@ -285,7 +286,7 @@ class TCNTapDetector:
 
         return probs  # (5,) — one probability per fingertip
 
-    def train(self, data_root: str, epochs: int = 30, lr: float = 0.001,
+    def train(self, data_root: str, epochs: int = 3000, lr: float = 0.001,
               batch_size: int = 64, save_path: str = 'src/tcn_tap_model.pth',
               val_split: float = 0.15):
         """
