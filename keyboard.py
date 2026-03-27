@@ -681,10 +681,10 @@ class VRKeyboardCVPR2026:
                        cv2.FONT_HERSHEY_SIMPLEX, 0.35, (150, 150, 255), 1)
         txt = self.typed_text[-50:]
         cv2.putText(frame, txt, (10, h-10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
-
-        if self.debug_mode:
-            cv2.putText(frame, f"WPM: {self.typing_metrics.wpm:.1f}", (10, 60),
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 255, 0), 1)
+        # Cooment out WPM display for cleaner UI, can be enabled in debug mode
+        # if self.debug_mode:
+        #     cv2.putText(frame, f"WPM: {self.typing_metrics.wpm:.1f}", (10, 60),
+        #                cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 255, 0), 1)
 
         # Word predictions
         if self.word_predictor:
