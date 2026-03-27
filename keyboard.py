@@ -602,13 +602,21 @@ class VRKeyboardCVPR2026:
         sigma_y: float = 15.0,
         lm_weight: float = 0.7,
         use_lm: bool = True,
-        collect_landmarks: bool = False
+        collect_landmarks: bool = False  # kept for CLI compat, data always collected
     ):
         self.diagnose_mode = diagnose_mode
         self._diagnose_log = []
         self.target_phrase = target_phrase
-        self.collect_landmarks = collect_landmarks
         self._landmark_frame_idx = 0
+
+        # Auto-collect landmarks for TCN training (always on, appends to pool)
+        from datetime import datetime
+        self._tcn_session_dir = os.path.join(
+            'tcn_training_data',
+            f'session_{datetime.now().strftime("%Y%m%d_%H%M%S")}'
+        )
+        os.makedirs(self._tcn_session_dir, exist_ok=True)
+        self._tcn_collect_data = []  # buffer for current session
         print("=" * 70)
         print("  VR KEYBOARD - CVPR 2026 IMPLEMENTATION (V1)")
         print("  Real-Time Multimodal Fingertip Contact Detection")
@@ -1455,11 +1463,27 @@ class VRKeyboardCVPR2026:
                                 hand_landmarks, frame.shape[:2], depth_map
                             )
                             tcn_probs = self.tcn_detector.predict_frame(tcn_features)
-                            # tcn_probs: [thumb, index, middle, ring, pinky]
 
-                        # Collect landmarks for TCN training
-                        if self.collect_landmarks:
-                            self._landmark_frame_idx += 1
+                        # Auto-collect landmarks for TCN training (every frame)
+                        self._landmark_frame_idx += 1
+                        try:
+                            lm_data = []
+                            for lm in hand_landmarks.landmark:
+                                lm_data.extend([lm.x, lm.y])
+                            # Add fingertip depths
+                            for tip_id in [4, 8, 12, 16, 20]:
+                                lm = hand_landmarks.landmark[tip_id]
+                                px = max(0, min(int(lm.x * frame.shape[1]), frame.shape[1]-1))
+                                py = max(0, min(int(lm.y * frame.shape[0]), frame.shape[0]-1))
+                                lm_data.append(float(depth_map[py, px]))
+                            self._tcn_collect_data.append({
+                                'frame': self._landmark_frame_idx,
+                                'hand': hand_idx,
+                                'features': lm_data,  # 47 dims
+                                'label': 0  # updated to 1 when key is pressed
+                            })
+                        except Exception:
+                            pass
 
                         for fingertip_id in self.fingertip_landmarks:
                             x, y, depth_corrected, _ = self._get_fingertip_depth(
@@ -1500,6 +1524,10 @@ class VRKeyboardCVPR2026:
                                     'velocity': abs(debug_info['velocity_y']),
                                     'label': 1 if pressed_key else 0
                                 })
+
+                            # Mark last collected frame as contact if key was pressed
+                            if pressed_key and self._tcn_collect_data:
+                                self._tcn_collect_data[-1]['label'] = 1
 
                             # Draw velocity indicator
                             if 'velocity_y' in debug_info:
@@ -1613,6 +1641,20 @@ class VRKeyboardCVPR2026:
         finally:
             print("\n[SHUTDOWN]")
             self.print_metrics()
+
+            # Save collected TCN training data
+            if self._tcn_collect_data:
+                import json as _json
+                save_path = os.path.join(self._tcn_session_dir, 'landmarks.json')
+                with open(save_path, 'w') as f:
+                    _json.dump(self._tcn_collect_data, f)
+                n_contact = sum(1 for d in self._tcn_collect_data if d['label'] == 1)
+                n_total = len(self._tcn_collect_data)
+                print(f"[TCN DATA] Saved {n_total} frames ({n_contact} contacts) to {self._tcn_session_dir}")
+                # Count total sessions
+                parent = os.path.dirname(self._tcn_session_dir)
+                n_sessions = len([d for d in os.listdir(parent) if d.startswith('session_')]) if os.path.isdir(parent) else 1
+                print(f"[TCN DATA] Total sessions collected: {n_sessions}")
             if self.diagnose_mode and self._diagnose_log:
                 import pandas as pd
                 df = pd.DataFrame(self._diagnose_log)
